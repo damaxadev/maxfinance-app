@@ -1,3 +1,21 @@
+.mfx-home__period {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.mfx-home__period-month {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.mfx-home__period-range {
+  margin: 0;
+  font-size: 0.85rem;
+  opacity: 0.65;
+}
+
 .mfx-home__hero {
   color: var(--bg);
 }

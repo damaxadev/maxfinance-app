@@ -9,6 +9,13 @@ const CATEGORY_TYPES: { value: CategoryType; label: string }[] = [
   { value: 'income', label: 'Ingreso' },
 ];
 
+const CATEGORY_ICONS: readonly string[] = ['🛍️', '🐾', '🎮', '✈️', '💼', '🎁', '⚽', '📱', '⭐', '🏷️'];
+
+export interface CategorySaved {
+  id: string;
+  type: CategoryType;
+}
+
 @Component({
   selector: 'mfx-category-form',
   imports: [ReactiveFormsModule],
@@ -20,17 +27,18 @@ export class CategoryForm {
   private readonly fb = inject(FormBuilder);
 
   readonly initialValue = input<CategoryWithId | null>(null);
-  readonly saved = output<void>();
+  readonly saved = output<CategorySaved>();
   readonly deleted = output<void>();
 
   readonly categoryTypes = CATEGORY_TYPES;
+  readonly categoryIcons = CATEGORY_ICONS;
   readonly saving = signal(false);
   readonly deleting = signal(false);
   readonly errorMessage = signal<string | null>(null);
 
   readonly form = this.fb.nonNullable.group({
     name: ['', [Validators.required, Validators.minLength(2)]],
-    icon: ['🏷️', Validators.required],
+    icon: [CATEGORY_ICONS[0], Validators.required],
     type: ['expense' as CategoryType, Validators.required],
   });
 
@@ -55,12 +63,14 @@ export class CategoryForm {
 
     try {
       const existing = this.initialValue();
+      let id: string;
       if (existing) {
         await this.categories.update(existing.id, value);
+        id = existing.id;
       } else {
-        await this.categories.create(value);
+        id = await this.categories.create(value);
       }
-      this.saved.emit();
+      this.saved.emit({ id, type: value.type });
     } catch (error) {
       console.error('Error al guardar la categoría', error);
       this.errorMessage.set('No pudimos guardar la categoría. Intenta de nuevo.');

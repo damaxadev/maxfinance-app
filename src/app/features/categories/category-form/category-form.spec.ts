@@ -37,15 +37,35 @@ describe('CategoryForm', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it('creates a new category and emits saved', async () => {
-    const emitted: void[] = [];
-    component.saved.subscribe(() => emitted.push(undefined));
+  it('shows a visible error under Nombre when empty and touched after a failed submit', async () => {
+    component.form.patchValue({ name: '' });
+
+    await component.submit(); // markAllAsTouched()
+    fixture.detectChanges();
+
+    const error = fixture.nativeElement.querySelector('.mfx-form__error');
+    expect(error?.textContent).toContain('El nombre es obligatorio.');
+  });
+
+  it('shows a visible error under Nombre when shorter than minLength', async () => {
+    component.form.patchValue({ name: 'a' });
+
+    await component.submit();
+    fixture.detectChanges();
+
+    const error = fixture.nativeElement.querySelector('.mfx-form__error');
+    expect(error?.textContent).toContain('al menos 2 caracteres');
+  });
+
+  it('creates a new category and emits saved with its id and type', async () => {
+    const emitted: unknown[] = [];
+    component.saved.subscribe((event) => emitted.push(event));
     component.form.setValue({ name: 'Mascotas', icon: '🐶', type: 'expense' });
 
     await component.submit();
 
     expect(create).toHaveBeenCalledWith({ name: 'Mascotas', icon: '🐶', type: 'expense' });
-    expect(emitted.length).toBe(1);
+    expect(emitted).toEqual([{ id: 'new-id', type: 'expense' }]);
   });
 });
 
@@ -78,12 +98,25 @@ describe('CategoryForm in edit mode', () => {
     expect(component.form.getRawValue()).toEqual({ name: 'Mascotas', icon: '🐶', type: 'expense' });
   });
 
-  it('updates the category', async () => {
+  it('does not break the icon <select> when the existing icon is not in the fixed list', () => {
+    // '🐶' no está entre las 8 opciones fijas — el <select> no debe
+    // reventar, solo no mostrar ninguna opción seleccionada.
+    const select = fixture.nativeElement.querySelectorAll('select')[0] as HTMLSelectElement;
+
+    expect(select).toBeTruthy();
+    expect(select.selectedIndex).toBe(-1);
+    expect(component.form.controls.icon.value).toBe('🐶');
+  });
+
+  it('updates the category and emits saved with the existing id', async () => {
+    const emitted: unknown[] = [];
+    component.saved.subscribe((event) => emitted.push(event));
     component.form.patchValue({ name: 'Mascotas y vet' });
 
     await component.submit();
 
     expect(update).toHaveBeenCalledWith('cat1', { name: 'Mascotas y vet', icon: '🐶', type: 'expense' });
+    expect(emitted).toEqual([{ id: 'cat1', type: 'expense' }]);
   });
 
   it('deletes the category and emits deleted', async () => {

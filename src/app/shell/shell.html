@@ -35,7 +35,7 @@
   <mfx-modal [title]="request.mode === 'edit' ? 'Editar categoría' : 'Nueva categoría'" (closed)="categoryFormState.close()">
     <mfx-category-form
       [initialValue]="request.mode === 'edit' ? request.category : null"
-      (saved)="categoryFormState.close()"
+      (saved)="categoryFormState.close($event)"
       (deleted)="categoryFormState.close()"
     />
   </mfx-modal>

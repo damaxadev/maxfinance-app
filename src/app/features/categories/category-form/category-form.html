@@ -2,12 +2,28 @@
   <div class="mfx-form__row">
     <label class="mfx-form__field" style="flex: 0 0 5rem;">
       Ícono
-      <input type="text" formControlName="icon" maxlength="4" placeholder="🏷️" />
+      <select formControlName="icon">
+        @for (icon of categoryIcons; track icon) {
+          <option [value]="icon">{{ icon }}</option>
+        }
+      </select>
+      @if (form.controls.icon.invalid && form.controls.icon.touched) {
+        <span class="mfx-form__error" role="alert">El ícono es obligatorio.</span>
+      }
     </label>
 
     <label class="mfx-form__field">
       Nombre
       <input type="text" formControlName="name" placeholder="Ej. Mascotas" />
+      @if (form.controls.name.invalid && form.controls.name.touched) {
+        <span class="mfx-form__error" role="alert">
+          @if (form.controls.name.hasError('required')) {
+            El nombre es obligatorio.
+          } @else if (form.controls.name.hasError('minlength')) {
+            El nombre debe tener al menos 2 caracteres.
+          }
+        </span>
+      }
     </label>
   </div>
 

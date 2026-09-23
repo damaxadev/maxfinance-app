@@ -1,6 +1,11 @@
 <section class="mfx-view">
   <h1>Inicio</h1>
 
+  <div class="mfx-home__period">
+    <p class="mfx-home__period-month">{{ monthLabel }}</p>
+    <p class="mfx-home__period-range">{{ monthRangeLabel }}</p>
+  </div>
+
   <mfx-card class="mfx-gradient-hero mfx-home__hero" [index]="0">
     <p class="mfx-home__hero-label">Balance total</p>
     <mfx-animated-number class="mfx-home__hero-amount" [value]="totalBalance()" prefix="$ " />

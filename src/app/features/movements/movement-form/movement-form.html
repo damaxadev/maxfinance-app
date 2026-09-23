@@ -4,18 +4,34 @@
   </p>
 } @else {
   <form class="mfx-form" [formGroup]="form" (ngSubmit)="submit()">
-    <div class="mfx-form__row">
+    <div class="mfx-segmented" role="radiogroup" aria-label="Tipo de movimiento">
+      <div class="mfx-segmented__thumb" [class.mfx-segmented__thumb--income]="typeValue() === 'income'"></div>
       @for (option of movementTypes; track option.value) {
-        <label class="mfx-form__field">
-          <input type="radio" formControlName="type" [value]="option.value" />
+        <button
+          type="button"
+          class="mfx-segmented__option"
+          role="radio"
+          [attr.aria-checked]="typeValue() === option.value"
+          [class.mfx-segmented__option--active]="typeValue() === option.value"
+          (click)="selectType(option.value)"
+        >
           {{ option.label }}
-        </label>
+        </button>
       }
     </div>
 
     <label class="mfx-form__field">
       Monto
       <input type="number" formControlName="amount" min="0.01" step="0.01" placeholder="0" />
+      @if (form.controls.amount.invalid && form.controls.amount.touched) {
+        <span class="mfx-form__error" role="alert">
+          @if (form.controls.amount.hasError('required')) {
+            El monto es obligatorio.
+          } @else if (form.controls.amount.hasError('min')) {
+            El monto debe ser mayor a 0.
+          }
+        </span>
+      }
     </label>
 
     <label class="mfx-form__field">
@@ -26,6 +42,9 @@
           <option [value]="account.id">{{ account.name }}</option>
         }
       </select>
+      @if (form.controls.accountId.invalid && form.controls.accountId.touched) {
+        <span class="mfx-form__error" role="alert">Selecciona una cuenta.</span>
+      }
     </label>
 
     <label class="mfx-form__field">
@@ -35,15 +54,25 @@
         @for (category of filteredCategories(); track category.id) {
           <option [value]="category.id">{{ category.icon }} {{ category.name }}</option>
         }
+        <option [value]="newCategoryOption">+ Nueva categoría</option>
       </select>
       @if (filteredCategories().length === 0) {
         <span>No tienes categorías de este tipo todavía — créalas en Ajustes.</span>
+      }
+      @if (form.controls.categoryId.invalid && form.controls.categoryId.touched) {
+        <span class="mfx-form__error" role="alert">Selecciona una categoría.</span>
+      }
+      @if (categoryError()) {
+        <span class="mfx-form__error" role="alert">{{ categoryError() }}</span>
       }
     </label>
 
     <label class="mfx-form__field">
       Fecha
       <input type="date" formControlName="date" />
+      @if (form.controls.date.invalid && form.controls.date.touched) {
+        <span class="mfx-form__error" role="alert">La fecha es obligatoria.</span>
+      }
     </label>
 
     <label class="mfx-form__field">
