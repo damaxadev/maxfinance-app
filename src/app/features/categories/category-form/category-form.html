@@ -1,0 +1,37 @@
+<form class="mfx-form" [formGroup]="form" (ngSubmit)="submit()">
+  <div class="mfx-form__row">
+    <label class="mfx-form__field" style="flex: 0 0 5rem;">
+      Ícono
+      <input type="text" formControlName="icon" maxlength="4" placeholder="🏷️" />
+    </label>
+
+    <label class="mfx-form__field">
+      Nombre
+      <input type="text" formControlName="name" placeholder="Ej. Mascotas" />
+    </label>
+  </div>
+
+  <label class="mfx-form__field">
+    Tipo
+    <select formControlName="type">
+      @for (option of categoryTypes; track option.value) {
+        <option [value]="option.value">{{ option.label }}</option>
+      }
+    </select>
+  </label>
+
+  @if (errorMessage()) {
+    <p class="mfx-form__error" role="alert">{{ errorMessage() }}</p>
+  }
+
+  <div class="mfx-form__actions">
+    @if (initialValue()) {
+      <button type="button" class="mfx-btn-danger" [disabled]="saving() || deleting()" (click)="remove()">
+        {{ deleting() ? 'Eliminando…' : 'Eliminar' }}
+      </button>
+    }
+    <button type="submit" class="mfx-btn-primary" [disabled]="saving() || deleting()">
+      {{ saving() ? 'Guardando…' : initialValue() ? 'Guardar cambios' : 'Crear categoría' }}
+    </button>
+  </div>
+</form>

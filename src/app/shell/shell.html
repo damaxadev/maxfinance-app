@@ -8,5 +8,35 @@
   </swiper-container>
 
   <mfx-tab-bar [activeIndex]="activeIndex()" (tabSelected)="onTabSelected($event)" />
-  <mfx-fab />
+  <mfx-fab (movementRequested)="movementFormState.openCreate()" />
 </div>
+
+@if (movementFormState.request(); as request) {
+  <mfx-modal [title]="request.mode === 'edit' ? 'Editar movimiento' : 'Agregar movimiento'" (closed)="movementFormState.close()">
+    <mfx-movement-form
+      [initialValue]="request.mode === 'edit' ? request.movement : null"
+      (saved)="movementFormState.close()"
+      (deleted)="movementFormState.close()"
+    />
+  </mfx-modal>
+}
+
+@if (accountFormState.request(); as request) {
+  <mfx-modal [title]="request.mode === 'edit' ? 'Editar cuenta' : 'Nueva cuenta'" (closed)="accountFormState.close()">
+    <mfx-account-form
+      [initialValue]="request.mode === 'edit' ? request.account : null"
+      (saved)="accountFormState.close()"
+      (deleted)="accountFormState.close()"
+    />
+  </mfx-modal>
+}
+
+@if (categoryFormState.request(); as request) {
+  <mfx-modal [title]="request.mode === 'edit' ? 'Editar categoría' : 'Nueva categoría'" (closed)="categoryFormState.close()">
+    <mfx-category-form
+      [initialValue]="request.mode === 'edit' ? request.category : null"
+      (saved)="categoryFormState.close()"
+      (deleted)="categoryFormState.close()"
+    />
+  </mfx-modal>
+}

@@ -1,0 +1,69 @@
+@if (accounts().length === 0) {
+  <p class="mfx-form__error">
+    Primero crea una cuenta (pestaña Movimientos) para poder registrar movimientos.
+  </p>
+} @else {
+  <form class="mfx-form" [formGroup]="form" (ngSubmit)="submit()">
+    <div class="mfx-form__row">
+      @for (option of movementTypes; track option.value) {
+        <label class="mfx-form__field">
+          <input type="radio" formControlName="type" [value]="option.value" />
+          {{ option.label }}
+        </label>
+      }
+    </div>
+
+    <label class="mfx-form__field">
+      Monto
+      <input type="number" formControlName="amount" min="0.01" step="0.01" placeholder="0" />
+    </label>
+
+    <label class="mfx-form__field">
+      Cuenta
+      <select formControlName="accountId">
+        <option value="" disabled>Selecciona una cuenta</option>
+        @for (account of accounts(); track account.id) {
+          <option [value]="account.id">{{ account.name }}</option>
+        }
+      </select>
+    </label>
+
+    <label class="mfx-form__field">
+      Categoría
+      <select formControlName="categoryId">
+        <option value="" disabled>Selecciona una categoría</option>
+        @for (category of filteredCategories(); track category.id) {
+          <option [value]="category.id">{{ category.icon }} {{ category.name }}</option>
+        }
+      </select>
+      @if (filteredCategories().length === 0) {
+        <span>No tienes categorías de este tipo todavía — créalas en Ajustes.</span>
+      }
+    </label>
+
+    <label class="mfx-form__field">
+      Fecha
+      <input type="date" formControlName="date" />
+    </label>
+
+    <label class="mfx-form__field">
+      Nota
+      <textarea formControlName="note" placeholder="Opcional"></textarea>
+    </label>
+
+    @if (errorMessage()) {
+      <p class="mfx-form__error" role="alert">{{ errorMessage() }}</p>
+    }
+
+    <div class="mfx-form__actions">
+      @if (initialValue()) {
+        <button type="button" class="mfx-btn-danger" [disabled]="saving() || deleting()" (click)="remove()">
+          {{ deleting() ? 'Eliminando…' : 'Eliminar' }}
+        </button>
+      }
+      <button type="submit" class="mfx-btn-primary" [disabled]="saving() || deleting()">
+        {{ saving() ? 'Guardando…' : initialValue() ? 'Guardar cambios' : 'Agregar movimiento' }}
+      </button>
+    </div>
+  </form>
+}

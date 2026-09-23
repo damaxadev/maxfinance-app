@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, output, signal } from '@angular/core';
 import { animate, style, transition, trigger } from '@angular/animations';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 
@@ -43,6 +43,7 @@ export class Fab {
   readonly options = FAB_OPTIONS;
   readonly open = signal(false);
   readonly message = signal<string | null>(null);
+  readonly movementRequested = output<void>();
 
   private messageTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -72,9 +73,15 @@ export class Fab {
   }
 
   selectOption(option: FabOption): void {
+    this.close();
+
+    if (option.id === 'movement') {
+      this.movementRequested.emit();
+      return;
+    }
+
     console.log(`[mfx-fab] "${option.label}" tocada (placeholder, sin acción real todavía)`);
     this.showMessage(`Próximamente: ${option.label}`);
-    this.close();
   }
 
   private showMessage(text: string): void {

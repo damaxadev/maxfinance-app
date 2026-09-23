@@ -1,0 +1,52 @@
+:host {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: block;
+}
+
+.mfx-modal__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 11, 20, 0.65);
+}
+
+.mfx-modal__sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 85dvh;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+  padding: 1.25rem 1.25rem calc(1.5rem + env(safe-area-inset-bottom, 0));
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.4);
+}
+
+.mfx-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+
+  h2 {
+    margin: 0;
+    color: var(--text);
+    font-size: 1.125rem;
+  }
+}
+
+.mfx-modal__close {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  opacity: 0.7;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+
+  &:hover {
+    opacity: 1;
+  }
+}
