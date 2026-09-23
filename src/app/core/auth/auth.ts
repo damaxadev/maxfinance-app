@@ -2,6 +2,8 @@ import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject, Observable, filter } from 'rxjs';
 import { FirebaseAuthentication, type User as AuthUser } from '@capacitor-firebase/authentication';
 import { Firestore, doc, getDoc, setDoc, updateDoc, serverTimestamp } from '@angular/fire/firestore';
+import { Auth as FirebaseJsAuth } from '@angular/fire/auth';
+import { GoogleAuthProvider, signInWithCredential, signOut as signOutFromFirebaseJsAuth } from 'firebase/auth';
 
 import type { User } from '../../models/user.model';
 
@@ -10,6 +12,7 @@ import type { User } from '../../models/user.model';
 })
 export class Auth {
   private readonly firestore = inject(Firestore);
+  private readonly firebaseJsAuth = inject(FirebaseJsAuth);
 
   // undefined = todavía no se conoce el estado (sesión restaurándose).
   private readonly authState = new BehaviorSubject<AuthUser | null | undefined>(undefined);
@@ -34,15 +37,28 @@ export class Auth {
   }
 
   async signInWithGoogle(): Promise<AuthUser | null> {
-    const { user } = await FirebaseAuthentication.signInWithGoogle();
-    if (user) {
-      await this.ensureUserDocument(user);
+    const result = await FirebaseAuthentication.signInWithGoogle();
+
+    // El login nativo autentica el SDK nativo, pero @angular/fire/firestore
+    // usa el Auth JS SDK, que se queda sin sesión si no lo sincronizamos
+    // explícitamente. Sin este paso, Firestore ve request.auth == null y
+    // rechaza las escrituras con permission-denied.
+    const idToken = result.credential?.idToken;
+    if (!idToken) {
+      throw new Error('Google Sign-In no devolvió un idToken; no se pudo sincronizar el SDK web de Firebase Auth.');
     }
-    return user;
+    const credential = GoogleAuthProvider.credential(idToken, result.credential?.accessToken);
+    await signInWithCredential(this.firebaseJsAuth, credential);
+
+    if (result.user) {
+      await this.ensureUserDocument(result.user);
+    }
+    return result.user;
   }
 
   async signOut(): Promise<void> {
     await FirebaseAuthentication.signOut();
+    await signOutFromFirebaseJsAuth(this.firebaseJsAuth);
   }
 
   async updateDisplayName(displayName: string): Promise<void> {
