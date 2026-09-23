@@ -8,7 +8,7 @@
   </swiper-container>
 
   <mfx-tab-bar [activeIndex]="activeIndex()" (tabSelected)="onTabSelected($event)" />
-  <mfx-fab (movementRequested)="movementFormState.openCreate()" />
+  <mfx-fab (movementRequested)="movementFormState.openCreate()" (groupRequested)="groupFormState.openCreate()" />
 </div>
 
 @if (movementFormState.request(); as request) {
@@ -38,5 +38,17 @@
       (saved)="categoryFormState.close($event)"
       (deleted)="categoryFormState.close()"
     />
+  </mfx-modal>
+}
+
+@if (groupFormState.open()) {
+  <mfx-modal title="Nuevo grupo" (closed)="groupFormState.close()">
+    <mfx-group-form (saved)="groupFormState.close()" />
+  </mfx-modal>
+}
+
+@if (groupDetailState.groupId(); as groupId) {
+  <mfx-modal title="Grupo" (closed)="groupDetailState.close()">
+    <mfx-group-detail [groupId]="groupId" (left)="groupDetailState.close()" />
   </mfx-modal>
 }

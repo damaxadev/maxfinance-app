@@ -11,6 +11,10 @@
 npm-debug.log
 yarn-error.log
 
+# Cloud Functions
+/functions/node_modules
+/functions/lib
+
 # IDEs and editors
 .idea/
 .project

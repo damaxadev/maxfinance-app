@@ -9,6 +9,7 @@ export interface FabOption {
 
 const FAB_OPTIONS: readonly FabOption[] = [
   { id: 'movement', label: 'Agregar movimiento' },
+  { id: 'group', label: 'Nuevo grupo' },
   { id: 'shared-expense', label: 'Agregar gasto compartido' },
 ];
 
@@ -44,6 +45,7 @@ export class Fab {
   readonly open = signal(false);
   readonly message = signal<string | null>(null);
   readonly movementRequested = output<void>();
+  readonly groupRequested = output<void>();
 
   private messageTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -77,6 +79,11 @@ export class Fab {
 
     if (option.id === 'movement') {
       this.movementRequested.emit();
+      return;
+    }
+
+    if (option.id === 'group') {
+      this.groupRequested.emit();
       return;
     }
 

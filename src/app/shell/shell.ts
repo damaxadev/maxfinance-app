@@ -15,10 +15,28 @@ import { AccountFormState } from '../core/account-form-state/account-form-state'
 import { AccountForm } from '../features/accounts/account-form/account-form';
 import { CategoryFormState } from '../core/category-form-state/category-form-state';
 import { CategoryForm } from '../features/categories/category-form/category-form';
+import { GroupFormState } from '../core/group-form-state/group-form-state';
+import { GroupForm } from '../features/groups/group-form/group-form';
+import { GroupDetailState } from '../core/group-detail-state/group-detail-state';
+import { GroupDetail } from '../features/groups/group-detail/group-detail';
 
 @Component({
   selector: 'mfx-shell',
-  imports: [TabBar, Fab, Modal, MovementForm, AccountForm, CategoryForm, Home, Movements, Groups, Budget, Settings],
+  imports: [
+    TabBar,
+    Fab,
+    Modal,
+    MovementForm,
+    AccountForm,
+    CategoryForm,
+    GroupForm,
+    GroupDetail,
+    Home,
+    Movements,
+    Groups,
+    Budget,
+    Settings,
+  ],
   templateUrl: './shell.html',
   styleUrl: './shell.scss',
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
@@ -28,6 +46,8 @@ export class Shell implements AfterViewInit, OnDestroy {
   readonly movementFormState = inject(MovementFormState);
   readonly accountFormState = inject(AccountFormState);
   readonly categoryFormState = inject(CategoryFormState);
+  readonly groupFormState = inject(GroupFormState);
+  readonly groupDetailState = inject(GroupDetailState);
 
   readonly activeIndex = signal(0);
 
