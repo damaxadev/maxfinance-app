@@ -74,16 +74,28 @@ describe('Fab', () => {
     expect(mockImpact).not.toHaveBeenCalled();
   });
 
-  it('selecting an option closes the menu and shows a temporary message', () => {
+  it('selecting the placeholder option closes the menu and shows a temporary message', () => {
     component.toggle();
+
+    component.selectOption(component.options[1]);
+
+    expect(component.open()).toBe(false);
+    expect(component.message()).toBe('Próximamente: Agregar gasto compartido');
+
+    vi.advanceTimersByTime(2000);
+    expect(component.message()).toBeNull();
+  });
+
+  it('selecting "Agregar movimiento" emits movementRequested instead of the placeholder', () => {
+    component.toggle();
+    const emitted: void[] = [];
+    component.movementRequested.subscribe(() => emitted.push(undefined));
 
     component.selectOption(component.options[0]);
 
     expect(component.open()).toBe(false);
-    expect(component.message()).toBe('Próximamente: Agregar movimiento');
-
-    vi.advanceTimersByTime(2000);
     expect(component.message()).toBeNull();
+    expect(emitted.length).toBe(1);
   });
 
   it('renders both placeholder options while open', () => {

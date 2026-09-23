@@ -1,0 +1,12 @@
+<div class="mfx-modal__backdrop" [@backdropFade] (click)="close()"></div>
+
+<div class="mfx-modal__sheet" [@sheetSlide]>
+  <header class="mfx-modal__header">
+    <h2>{{ title() }}</h2>
+    <button type="button" class="mfx-modal__close" aria-label="Cerrar" (click)="close()">✕</button>
+  </header>
+
+  <div class="mfx-modal__body">
+    <ng-content></ng-content>
+  </div>
+</div>

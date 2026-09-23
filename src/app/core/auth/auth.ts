@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, Injector, inject, runInInjectionContext } from '@angular/core';
 import { BehaviorSubject, Observable, filter } from 'rxjs';
 import { FirebaseAuthentication, type User as AuthUser } from '@capacitor-firebase/authentication';
 import { Firestore, doc, getDoc, setDoc, updateDoc, serverTimestamp } from '@angular/fire/firestore';
@@ -13,6 +13,7 @@ import type { User } from '../../models/user.model';
 export class Auth {
   private readonly firestore = inject(Firestore);
   private readonly firebaseJsAuth = inject(FirebaseJsAuth);
+  private readonly injector = inject(Injector);
 
   // undefined = todavía no se conoce el estado (sesión restaurándose).
   private readonly authState = new BehaviorSubject<AuthUser | null | undefined>(undefined);
@@ -71,8 +72,12 @@ export class Auth {
   }
 
   private async ensureUserDocument(user: AuthUser): Promise<void> {
-    const ref = doc(this.firestore, 'users', user.uid);
-    const snapshot = await getDoc(ref);
+    // Cada llamada se envuelve por separado: signInWithGoogle() ya hizo
+    // varios `await` antes de llegar acá, así que el contexto de inyección
+    // síncrono de Angular ya se perdió (runInInjectionContext solo cubre
+    // la parte síncrona de su callback, no lo que sigue después de un await).
+    const ref = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid));
+    const snapshot = await runInInjectionContext(this.injector, () => getDoc(ref));
     if (snapshot.exists()) {
       return;
     }
@@ -84,6 +89,6 @@ export class Auth {
       photoURL: user.photoUrl ?? '',
       createdAt: serverTimestamp(),
     };
-    await setDoc(ref, newUser);
+    await runInInjectionContext(this.injector, () => setDoc(ref, newUser));
   }
 }

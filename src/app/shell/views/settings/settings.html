@@ -5,4 +5,21 @@
     <p>Más ajustes llegan en fases posteriores.</p>
     <a routerLink="/perfil">Ir a mi perfil →</a>
   </mfx-card>
+
+  <div class="mfx-section-header">
+    <h2>Categorías personalizadas</h2>
+    <button type="button" class="mfx-section-add" (click)="openCreateCategory()">+ Categoría</button>
+  </div>
+
+  @if (customCategories().length === 0) {
+    <mfx-card [index]="1">
+      <p>No tienes categorías personalizadas todavía. Las categorías base ya están disponibles al agregar un movimiento.</p>
+    </mfx-card>
+  } @else {
+    @for (category of customCategories(); track category.id; let i = $index) {
+      <mfx-card [index]="i + 1" (click)="openEditCategory(category)">
+        <span>{{ category.icon }} {{ category.name }} · {{ category.type === 'income' ? 'Ingreso' : 'Gasto' }}</span>
+      </mfx-card>
+    }
+  }
 </section>

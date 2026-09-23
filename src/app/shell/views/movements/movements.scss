@@ -1,0 +1,48 @@
+.mfx-movements__account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mfx-movements__filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+
+  select,
+  input {
+    font-family: inherit;
+    font-size: 0.85rem;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid rgba(245, 247, 250, 0.15);
+    border-radius: 10px;
+    padding: 0.5rem 0.625rem;
+  }
+}
+
+.mfx-movements__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.mfx-movements__item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.mfx-movements__item-account {
+  font-size: 0.75rem;
+  opacity: 0.65;
+}
+
+.mfx-movements__amount--income {
+  color: var(--primary);
+}
+
+.mfx-movements__amount--expense {
+  color: var(--danger);
+}
