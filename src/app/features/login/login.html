@@ -1,0 +1,12 @@
+<main class="mfx-login">
+  <h1>MaxFinance</h1>
+  <p>Inicia sesión para llevar tus gastos personales y compartidos.</p>
+
+  <button type="button" [disabled]="loading()" (click)="signInWithGoogle()">
+    {{ loading() ? 'Conectando…' : 'Continuar con Google' }}
+  </button>
+
+  @if (errorMessage()) {
+    <p class="mfx-login__error" role="alert">{{ errorMessage() }}</p>
+  }
+</main>
