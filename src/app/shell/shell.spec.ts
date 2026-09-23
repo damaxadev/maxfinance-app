@@ -139,14 +139,15 @@ describe('Shell', () => {
     expect(fixture.nativeElement.querySelector('mfx-category-form')).toBeTruthy();
   });
 
-  it('closes the category modal when the category form is saved', () => {
+  it('closes the category modal when the category form is saved, and records what was saved', () => {
     component.categoryFormState.openCreate();
     fixture.detectChanges();
 
     const form = fixture.debugElement.query(By.directive(CategoryForm)).componentInstance as CategoryForm;
-    form.saved.emit();
+    form.saved.emit({ id: 'cat-new', type: 'expense' });
     fixture.detectChanges();
 
     expect(component.categoryFormState.request()).toBeNull();
+    expect(component.categoryFormState.lastSaved()).toEqual({ id: 'cat-new', type: 'expense' });
   });
 });

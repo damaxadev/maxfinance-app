@@ -37,4 +37,32 @@ describe('CategoryFormState', () => {
     service.close();
     expect(service.request()).toBeNull();
   });
+
+  it('starts with no lastSaved', () => {
+    expect(service.lastSaved()).toBeNull();
+  });
+
+  it('records what was saved when closing with a payload', () => {
+    service.openCreate();
+    service.close({ id: 'cat-new', type: 'income' });
+
+    expect(service.request()).toBeNull();
+    expect(service.lastSaved()).toEqual({ id: 'cat-new', type: 'income' });
+  });
+
+  it('does not touch lastSaved when closing without a payload', () => {
+    service.openCreate();
+    service.close({ id: 'cat-new', type: 'income' });
+    service.openCreate();
+    service.close();
+
+    expect(service.lastSaved()).toEqual({ id: 'cat-new', type: 'income' });
+  });
+
+  it('clears lastSaved', () => {
+    service.close({ id: 'cat-new', type: 'income' });
+    service.clearLastSaved();
+
+    expect(service.lastSaved()).toBeNull();
+  });
 });
