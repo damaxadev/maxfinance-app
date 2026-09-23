@@ -77,7 +77,7 @@ describe('Fab', () => {
   it('selecting the placeholder option closes the menu and shows a temporary message', () => {
     component.toggle();
 
-    component.selectOption(component.options[1]);
+    component.selectOption(component.options[2]);
 
     expect(component.open()).toBe(false);
     expect(component.message()).toBe('Próximamente: Agregar gasto compartido');
@@ -98,7 +98,19 @@ describe('Fab', () => {
     expect(emitted.length).toBe(1);
   });
 
-  it('renders both placeholder options while open', () => {
+  it('selecting "Nuevo grupo" emits groupRequested instead of the placeholder', () => {
+    component.toggle();
+    const emitted: void[] = [];
+    component.groupRequested.subscribe(() => emitted.push(undefined));
+
+    component.selectOption(component.options[1]);
+
+    expect(component.open()).toBe(false);
+    expect(component.message()).toBeNull();
+    expect(emitted.length).toBe(1);
+  });
+
+  it('renders all three options while open', () => {
     component.toggle();
     fixture.detectChanges();
 
@@ -106,7 +118,7 @@ describe('Fab', () => {
       fixture.nativeElement.querySelectorAll('.mfx-fab__option')
     ).map((el) => el.textContent?.trim());
 
-    expect(labels).toEqual(['Agregar movimiento', 'Agregar gasto compartido']);
+    expect(labels).toEqual(['Agregar movimiento', 'Nuevo grupo', 'Agregar gasto compartido']);
   });
 
   it('closes when the backdrop is clicked', () => {

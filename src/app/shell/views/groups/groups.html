@@ -1,7 +1,34 @@
 <section class="mfx-view">
   <h1>Grupos</h1>
 
-  <mfx-card [index]="0">
-    <p>Acá vas a gestionar tus grupos y gastos compartidos.</p>
-  </mfx-card>
+  <div class="mfx-section-header">
+    <h2>Tus grupos</h2>
+    <button type="button" class="mfx-section-add" (click)="groupFormState.openCreate()">+ Grupo</button>
+  </div>
+
+  @if (groups().length > 1) {
+    <label class="mfx-form__field">
+      Grupo activo
+      <select [value]="activeGroup.groupId()" (change)="activeGroup.select($any($event.target).value)">
+        @for (group of groups(); track group.id) {
+          <option [value]="group.id">{{ group.name }}</option>
+        }
+      </select>
+    </label>
+  }
+
+  @if (groups().length === 0) {
+    <mfx-card [index]="0">
+      <p>Todavía no perteneces a ningún grupo. Crea el primero para empezar a compartir gastos.</p>
+    </mfx-card>
+  } @else {
+    @for (group of groups(); track group.id; let i = $index) {
+      <mfx-card [index]="i" (click)="openDetail(group)">
+        <div class="mfx-groups__item">
+          <span>{{ group.name }}</span>
+          <span class="mfx-groups__count">{{ group.members.length }} miembro{{ group.members.length === 1 ? '' : 's' }}</span>
+        </div>
+      </mfx-card>
+    }
+  }
 </section>

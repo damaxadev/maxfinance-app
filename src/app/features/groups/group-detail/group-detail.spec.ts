@@ -1,0 +1,339 @@
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { of } from 'rxjs';
+import { vi } from 'vitest';
+
+import { Auth } from '../../../core/auth/auth';
+import { GroupsService } from '../../../core/groups/groups';
+import { GroupDetail } from './group-detail';
+
+const { mockImpact } = vi.hoisted(() => ({
+  mockImpact: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@capacitor/haptics', () => ({
+  Haptics: { impact: mockImpact },
+  ImpactStyle: { Light: 'LIGHT', Medium: 'MEDIUM', Heavy: 'HEAVY' },
+}));
+
+// getMemberProfiles()/getKnownContacts() encadenan .then().catch().finally()
+// dentro de effects/promesas del constructor — cada eslabón necesita su
+// propio microtask, así que se drenan varios turnos explícitamente en vez
+// de confiar en whenStable()/zone tracking.
+async function flushMicrotasks(): Promise<void> {
+  for (let i = 0; i < 4; i++) {
+    await Promise.resolve();
+  }
+}
+
+const fakeGroup = { id: 'group1', name: 'Apartamento', members: ['u1', 'u2'], createdBy: 'u1', createdAt: {} as never };
+const fakeMemberProfiles = [
+  { uid: 'u1', displayName: 'Diego', email: 'diego@example.com', photoURL: '' },
+  { uid: 'u2', displayName: 'Ana', email: 'ana@example.com', photoURL: 'https://example.com/ana.jpg' },
+];
+// Ana (u2) ya es miembro de group1 -> debe quedar excluida de las sugerencias.
+// Beto (u3) no lo es -> debe aparecer como chip sugerido.
+const fakeContacts = [
+  { uid: 'u2', displayName: 'Ana', email: 'ana@example.com', photoURL: 'https://example.com/ana.jpg' },
+  { uid: 'u3', displayName: 'Beto', email: 'beto@example.com', photoURL: '' },
+];
+
+describe('GroupDetail (viewed by the creator)', () => {
+  let component: GroupDetail;
+  let fixture: ComponentFixture<GroupDetail>;
+  let leave: ReturnType<typeof vi.fn>;
+  let removeMember: ReturnType<typeof vi.fn>;
+  let inviteByEmail: ReturnType<typeof vi.fn>;
+  let inviteByUid: ReturnType<typeof vi.fn>;
+  let getMemberProfiles: ReturnType<typeof vi.fn>;
+  let getKnownContacts: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    mockImpact.mockClear();
+    leave = vi.fn().mockResolvedValue(undefined);
+    removeMember = vi.fn().mockResolvedValue(undefined);
+    inviteByEmail = vi.fn().mockResolvedValue(undefined);
+    inviteByUid = vi.fn().mockResolvedValue(undefined);
+    getMemberProfiles = vi.fn().mockResolvedValue(fakeMemberProfiles);
+    getKnownContacts = vi.fn().mockResolvedValue(fakeContacts);
+
+    await TestBed.configureTestingModule({
+      imports: [GroupDetail],
+      providers: [
+        { provide: Auth, useValue: { currentUser: { uid: 'u1', email: 'diego@example.com' } } },
+        {
+          provide: GroupsService,
+          useValue: {
+            groups$: of([fakeGroup]),
+            leave,
+            removeMember,
+            inviteByEmail,
+            inviteByUid,
+            getMemberProfiles,
+            getKnownContacts,
+          },
+        },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(GroupDetail);
+    fixture.componentRef.setInput('groupId', 'group1');
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    await flushMicrotasks();
+    fixture.detectChanges();
+  });
+
+  it('should create', () => {
+    expect(component).toBeTruthy();
+  });
+
+  it('resolves the group by id from groups$', () => {
+    expect(component.group()).toEqual(fakeGroup);
+  });
+
+  it('is the creator', () => {
+    expect(component.isCreator()).toBe(true);
+  });
+
+  it('loads member profiles for the group', () => {
+    expect(getMemberProfiles).toHaveBeenCalledWith('group1');
+    expect(component.members()).toEqual(fakeMemberProfiles);
+  });
+
+  it('shows a "Salir" button for the current user and "Eliminar" for others (creator view)', () => {
+    const buttons = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button'));
+    const labels = buttons.map((b) => b.textContent?.trim());
+
+    expect(labels).toContain('Salir');
+    expect(labels).toContain('Eliminar');
+  });
+
+  it('leave() calls the service and emits left on success', async () => {
+    const emitted: void[] = [];
+    component.left.subscribe(() => emitted.push(undefined));
+
+    await component.leave();
+
+    expect(leave).toHaveBeenCalledWith('group1');
+    expect(emitted.length).toBe(1);
+  });
+
+  it('removeMember() calls the service with the target uid', async () => {
+    await component.removeMember('u2');
+
+    expect(removeMember).toHaveBeenCalledWith('group1', 'u2');
+  });
+
+  it('shows an action error if leave() fails, without emitting left', async () => {
+    leave.mockRejectedValue(new Error('No perteneces a este grupo.'));
+    const emitted: void[] = [];
+    component.left.subscribe(() => emitted.push(undefined));
+
+    await component.leave();
+
+    expect(component.actionError()).toBe('No perteneces a este grupo.');
+    expect(emitted.length).toBe(0);
+  });
+
+  it('loads known-contact suggestions, excluding people already in this group', () => {
+    expect(getKnownContacts).toHaveBeenCalled();
+    expect(component.suggestedContacts()).toEqual([fakeContacts[1]]); // solo Beto, no Ana
+  });
+
+  it('renders a chip only for the suggested (non-member) contact', () => {
+    const chips = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('.mfx-group-detail__chip'));
+
+    expect(chips.length).toBe(1);
+    expect(chips[0].textContent).toContain('Beto');
+  });
+
+  it('inviteContact() invites by uid directly, buzzes, and marks the contact as just invited', async () => {
+    await component.inviteContact(fakeContacts[1]);
+
+    expect(inviteByUid).toHaveBeenCalledWith('group1', 'u3');
+    expect(mockImpact).toHaveBeenCalledWith({ style: 'LIGHT' });
+    expect(component.justInvitedUids().has('u3')).toBe(true);
+  });
+
+  it('shows "Invitado ✓" in the chip right after a successful invite', async () => {
+    await component.inviteContact(fakeContacts[1]);
+    fixture.detectChanges();
+
+    const chip = fixture.nativeElement.querySelector('.mfx-group-detail__chip');
+    expect(chip.textContent).toContain('Invitado ✓');
+  });
+
+  it('shows an inline error (not an alert) if inviting a contact fails', async () => {
+    inviteByUid.mockRejectedValue(new Error('Esta persona ya es miembro del grupo.'));
+
+    await component.inviteContact(fakeContacts[1]);
+
+    expect(component.inviteError()).toBe('Esta persona ya es miembro del grupo.');
+  });
+
+  it('does not submit an invalid email', async () => {
+    component.inviteForm.patchValue({ email: 'not-an-email' });
+
+    await component.invite();
+
+    expect(inviteByEmail).not.toHaveBeenCalled();
+  });
+
+  it('blocks inviting your own email, without calling the function', async () => {
+    component.inviteForm.controls.email.setValue('Diego@Example.com'); // mismo correo, distinto casing
+
+    expect(component.inviteForm.controls.email.hasError('selfInvite')).toBe(true);
+    expect(component.inviteForm.invalid).toBe(true);
+
+    await component.invite();
+    expect(inviteByEmail).not.toHaveBeenCalled();
+  });
+
+  it('blocks an email that already belongs to a current member, without calling the function', async () => {
+    component.inviteForm.controls.email.setValue('ana@example.com');
+
+    expect(component.inviteForm.controls.email.hasError('alreadyMember')).toBe(true);
+
+    await component.invite();
+    expect(inviteByEmail).not.toHaveBeenCalled();
+  });
+
+  it('shows the specific inline error message for the self-invite case', () => {
+    component.inviteForm.controls.email.setValue('diego@example.com');
+    component.inviteForm.controls.email.markAsTouched();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.mfx-form__error').textContent).toContain(
+      'No puedes invitarte a ti mismo.'
+    );
+  });
+
+  it('shows the specific inline error message for the already-a-member case', () => {
+    component.inviteForm.controls.email.setValue('ana@example.com');
+    component.inviteForm.controls.email.markAsTouched();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.mfx-form__error').textContent).toContain(
+      'Ya es miembro de este grupo.'
+    );
+  });
+
+  it('disables the "Invitar" button while the email field is invalid', () => {
+    component.inviteForm.controls.email.setValue('');
+    fixture.detectChanges();
+
+    const submitButton: HTMLButtonElement = fixture.nativeElement.querySelector('.mfx-form__actions button');
+    expect(submitButton.disabled).toBe(true);
+  });
+
+  it('enables the "Invitar" button once the email is valid', () => {
+    component.inviteForm.controls.email.setValue('newperson@example.com');
+    fixture.detectChanges();
+
+    const submitButton: HTMLButtonElement = fixture.nativeElement.querySelector('.mfx-form__actions button');
+    expect(submitButton.disabled).toBe(false);
+  });
+
+  it('invites by email, resets the form, and shows success', async () => {
+    component.inviteForm.setValue({ email: 'friend@example.com' });
+
+    await component.invite();
+
+    expect(inviteByEmail).toHaveBeenCalledWith('group1', 'friend@example.com');
+    expect(component.inviteSuccess()).toBe(true);
+    expect(component.inviteForm.controls.email.value).toBe('');
+  });
+
+  it('shows the callable error message if inviting by email fails', async () => {
+    inviteByEmail.mockRejectedValue(new Error('Esta persona aún no tiene cuenta en MaxFinance.'));
+    component.inviteForm.setValue({ email: 'nobody@example.com' });
+
+    await component.invite();
+
+    expect(component.inviteError()).toBe('Esta persona aún no tiene cuenta en MaxFinance.');
+    expect(component.inviteSuccess()).toBe(false);
+  });
+});
+
+describe('GroupDetail (viewed by a non-creator member)', () => {
+  let component: GroupDetail;
+  let fixture: ComponentFixture<GroupDetail>;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [GroupDetail],
+      providers: [
+        { provide: Auth, useValue: { currentUser: { uid: 'u2', email: 'ana@example.com' } } },
+        {
+          provide: GroupsService,
+          useValue: {
+            groups$: of([fakeGroup]),
+            leave: vi.fn(),
+            removeMember: vi.fn(),
+            inviteByEmail: vi.fn(),
+            inviteByUid: vi.fn(),
+            getMemberProfiles: vi.fn().mockResolvedValue(fakeMemberProfiles),
+            getKnownContacts: vi.fn().mockResolvedValue(fakeContacts),
+          },
+        },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(GroupDetail);
+    fixture.componentRef.setInput('groupId', 'group1');
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    await flushMicrotasks();
+    fixture.detectChanges();
+  });
+
+  it('is not the creator', () => {
+    expect(component.isCreator()).toBe(false);
+  });
+
+  it('only shows "Salir" for itself, never "Eliminar" on someone else\'s row', () => {
+    const buttons = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button'));
+    const labels = buttons.map((b) => b.textContent?.trim());
+
+    expect(labels).toContain('Salir');
+    expect(labels).not.toContain('Eliminar');
+  });
+});
+
+describe('GroupDetail with no suggested contacts', () => {
+  let component: GroupDetail;
+  let fixture: ComponentFixture<GroupDetail>;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [GroupDetail],
+      providers: [
+        { provide: Auth, useValue: { currentUser: { uid: 'u1', email: 'diego@example.com' } } },
+        {
+          provide: GroupsService,
+          useValue: {
+            groups$: of([fakeGroup]),
+            leave: vi.fn(),
+            removeMember: vi.fn(),
+            inviteByEmail: vi.fn(),
+            inviteByUid: vi.fn(),
+            getMemberProfiles: vi.fn().mockResolvedValue(fakeMemberProfiles),
+            getKnownContacts: vi.fn().mockResolvedValue([]), // primer grupo, nadie más que conocer todavía
+          },
+        },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(GroupDetail);
+    fixture.componentRef.setInput('groupId', 'group1');
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    await flushMicrotasks();
+    fixture.detectChanges();
+  });
+
+  it('does not render the contacts section at all', () => {
+    expect(component.suggestedContacts()).toEqual([]);
+    expect(fixture.nativeElement.querySelector('.mfx-group-detail__contacts')).toBeNull();
+  });
+});
