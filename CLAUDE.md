@@ -35,6 +35,7 @@ Máquina Windows con dos identidades separadas (mismo patrón que Zentra/WeMatch
 - **Cloudflare Worker** (`maxfinance-worker`) como proxy de IA — guarda `ANTHROPIC_API_KEY` como secret
   - Auth del Worker: verifica ID token de Firebase (uid exacto) para llamadas del frontend, o secret compartido `X-Internal-Key` para llamadas servidor-a-servidor desde Cloud Functions
 - Modelo de datos completo: ver `DATABASE.md`
+- **UI/animación**: `@fontsource/rubik`, `swiper` (navegación deslizable), `canvas-confetti` (celebraciones), `@capacitor/haptics` (feedback táctil), Angular Animations — sistema de diseño completo en `DESIGN.md`
 
 ## Fases
 

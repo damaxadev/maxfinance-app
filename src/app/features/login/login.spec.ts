@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
 import { vi } from 'vitest';
 
@@ -16,7 +17,8 @@ describe('Login', () => {
     await TestBed.configureTestingModule({
       imports: [Login],
       providers: [
-        provideRouter([{ path: 'perfil', children: [] }]),
+        provideNoopAnimations(),
+        provideRouter([{ path: 'inicio', children: [] }]),
         { provide: Auth, useValue: { signInWithGoogle } },
       ],
     }).compileComponents();

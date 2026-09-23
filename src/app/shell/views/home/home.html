@@ -1,0 +1,17 @@
+<section class="mfx-view">
+  <h1>Inicio</h1>
+
+  <mfx-card class="mfx-gradient-hero mfx-home__hero" [index]="0">
+    <p class="mfx-home__hero-label">Balance total</p>
+    <mfx-animated-number class="mfx-home__hero-amount" [value]="balance" prefix="$ " />
+  </mfx-card>
+
+  <mfx-card [index]="1">
+    <p>Presupuesto del mes</p>
+    <mfx-progress-ring [percentage]="budgetUsedPercent" />
+  </mfx-card>
+
+  <mfx-card [index]="2">
+    <p>Esta es una tarjeta de ejemplo. El contenido real llega en fases posteriores.</p>
+  </mfx-card>
+</section>

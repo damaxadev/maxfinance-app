@@ -1,31 +1,103 @@
 .mfx-profile {
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 1.25rem;
+  padding: 2rem 1.5rem;
+}
+
+.mfx-profile__photo {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface);
+
+  &--fallback {
+    display: grid;
+    place-items: center;
+    background: var(--primary);
+    color: var(--bg);
+    font-size: 2.25rem;
+    font-weight: 600;
+  }
+}
+
+.mfx-profile__card {
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
-  padding: 2rem;
-  text-align: center;
+  width: 100%;
+  max-width: 360px;
+}
 
-  &__photo {
-    width: 96px;
-    height: 96px;
-    border-radius: 50%;
-    object-fit: cover;
+.mfx-profile__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  color: var(--text);
+  opacity: 0.8;
+  font-size: 0.875rem;
+
+  input {
+    font-family: inherit;
+    font-size: 1rem;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid rgba(245, 247, 250, 0.15);
+    border-radius: 10px;
+    padding: 0.625rem 0.75rem;
+
+    &:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+  }
+}
+
+.mfx-profile__save {
+  border: none;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--bg);
+  padding: 0.75rem 1.5rem;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 150ms ease-out;
+
+  &:not(:disabled):hover {
+    opacity: 0.9;
   }
 
-  &__field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    width: 100%;
-    max-width: 320px;
+  &:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
+}
 
-  &__success {
-    color: #146c2e;
-  }
+.mfx-profile__success {
+  margin: 0;
+  color: var(--primary);
+}
 
-  &__error {
-    color: #b3261e;
+.mfx-profile__error {
+  margin: 0;
+  color: var(--danger);
+}
+
+.mfx-profile__signout {
+  border: none;
+  background: transparent;
+  color: var(--danger);
+  font-family: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0.5rem;
+
+  &:hover {
+    text-decoration: underline;
   }
 }

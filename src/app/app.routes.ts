@@ -12,6 +12,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/profile/profile').then((m) => m.Profile),
     canActivate: [authGuard],
   },
-  { path: '', pathMatch: 'full', redirectTo: 'perfil' },
-  { path: '**', redirectTo: 'perfil' },
+  {
+    path: 'inicio',
+    loadComponent: () => import('./shell/shell').then((m) => m.Shell),
+    canActivate: [authGuard],
+  },
+  { path: '', pathMatch: 'full', redirectTo: 'inicio' },
+  { path: '**', redirectTo: 'inicio' },
 ];

@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
@@ -19,6 +20,7 @@ describe('Profile', () => {
     await TestBed.configureTestingModule({
       imports: [Profile],
       providers: [
+        provideNoopAnimations(),
         provideRouter([]),
         {
           provide: Auth,
@@ -51,5 +53,59 @@ describe('Profile', () => {
 
     expect(updateDisplayName).toHaveBeenCalledWith('Ada Lovelace');
     expect(component.saved()).toBe(true);
+  });
+
+  it('shows the real photo when photoUrl is present and loads fine', () => {
+    fixture.detectChanges();
+
+    const img = fixture.nativeElement.querySelector('.mfx-profile__photo');
+    expect(img.tagName).toBe('IMG');
+  });
+
+  it('falls back to an initial avatar if the photo fails to load', () => {
+    fixture.detectChanges();
+
+    component.onPhotoError();
+    fixture.detectChanges();
+
+    const fallback = fixture.nativeElement.querySelector('.mfx-profile__photo--fallback');
+    expect(fallback).toBeTruthy();
+    expect(fallback.textContent.trim()).toBe('A');
+  });
+});
+
+describe('Profile without a photo URL', () => {
+  let component: Profile;
+  let fixture: ComponentFixture<Profile>;
+
+  const fakeUserNoPhoto = { uid: 'u2', displayName: 'bruno', photoUrl: '' };
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [Profile],
+      providers: [
+        provideNoopAnimations(),
+        provideRouter([]),
+        {
+          provide: Auth,
+          useValue: {
+            currentUser$: of(fakeUserNoPhoto),
+            currentUser: fakeUserNoPhoto,
+            updateDisplayName: vi.fn(),
+            signOut: vi.fn(),
+          },
+        },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(Profile);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  it('shows the initial avatar fallback directly, uppercased', () => {
+    const fallback = fixture.nativeElement.querySelector('.mfx-profile__photo--fallback');
+    expect(fallback).toBeTruthy();
+    expect(fallback.textContent.trim()).toBe('B');
   });
 });

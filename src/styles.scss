@@ -1,1 +1,52 @@
 /* You can add global styles to this file, and also import other style files */
+
+@import '@fontsource/rubik/400.css';
+@import '@fontsource/rubik/500.css';
+@import '@fontsource/rubik/600.css';
+@import '@fontsource/rubik/700.css';
+
+:root {
+  --bg: #060b14;
+  --surface: #101b2e;
+  --primary: #00e6a8;
+  --accent: #ffd166;
+  --danger: #ff6b6b;
+  --text: #f5f7fa;
+
+  --mfx-tab-bar-height: 64px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Rubik', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+// Layout base compartido por las vistas del shell (Inicio, Movimientos, ...)
+.mfx-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  padding-bottom: 5rem; // deja espacio para la bottom tab bar
+}
+
+// Fondo de la tarjeta de balance total, splash, etc. — DESIGN.md
+// Setea --mfx-card-bg además de background: así mfx-card puede leerlo (las
+// custom properties heredan a través de la encapsulación emulada de Angular,
+// evitando pelear por especificidad con el :host de la propia tarjeta).
+.mfx-gradient-hero {
+  --mfx-card-bg: linear-gradient(135deg, var(--primary), var(--accent));
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+}

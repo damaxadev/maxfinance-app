@@ -1,0 +1,12 @@
+<div class="mfx-shell">
+  <swiper-container #swiperEl class="mfx-shell__swiper" speed="350">
+    <swiper-slide><mfx-home /></swiper-slide>
+    <swiper-slide><mfx-movements /></swiper-slide>
+    <swiper-slide><mfx-groups /></swiper-slide>
+    <swiper-slide><mfx-budget /></swiper-slide>
+    <swiper-slide><mfx-settings /></swiper-slide>
+  </swiper-container>
+
+  <mfx-tab-bar [activeIndex]="activeIndex()" (tabSelected)="onTabSelected($event)" />
+  <mfx-fab />
+</div>
