@@ -58,17 +58,18 @@ describe('Profile', () => {
   it('shows the real photo when photoUrl is present and loads fine', () => {
     fixture.detectChanges();
 
-    const img = fixture.nativeElement.querySelector('.mfx-profile__photo');
+    const img = fixture.nativeElement.querySelector('.mfx-avatar');
     expect(img.tagName).toBe('IMG');
   });
 
   it('falls back to an initial avatar if the photo fails to load', () => {
     fixture.detectChanges();
 
-    component.onPhotoError();
+    const img: HTMLImageElement = fixture.nativeElement.querySelector('img.mfx-avatar');
+    img.dispatchEvent(new Event('error'));
     fixture.detectChanges();
 
-    const fallback = fixture.nativeElement.querySelector('.mfx-profile__photo--fallback');
+    const fallback = fixture.nativeElement.querySelector('.mfx-avatar--fallback');
     expect(fallback).toBeTruthy();
     expect(fallback.textContent.trim()).toBe('A');
   });
@@ -104,7 +105,7 @@ describe('Profile without a photo URL', () => {
   });
 
   it('shows the initial avatar fallback directly, uppercased', () => {
-    const fallback = fixture.nativeElement.querySelector('.mfx-profile__photo--fallback');
+    const fallback = fixture.nativeElement.querySelector('.mfx-avatar--fallback');
     expect(fallback).toBeTruthy();
     expect(fallback.textContent.trim()).toBe('B');
   });

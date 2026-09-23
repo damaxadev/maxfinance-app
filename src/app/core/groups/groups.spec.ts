@@ -8,9 +8,11 @@ import { vi } from 'vitest';
 import { Auth } from '../auth/auth';
 import { GroupsService } from './groups';
 
-const { mockAddDoc, mockUpdateDoc, mockCallable, mockHttpsCallable } = vi.hoisted(() => ({
+const { mockAddDoc, mockUpdateDoc, mockDeleteDoc, mockGetDocs, mockCallable, mockHttpsCallable } = vi.hoisted(() => ({
   mockAddDoc: vi.fn().mockResolvedValue({ id: 'new-group-id' }),
   mockUpdateDoc: vi.fn().mockResolvedValue(undefined),
+  mockDeleteDoc: vi.fn().mockResolvedValue(undefined),
+  mockGetDocs: vi.fn().mockResolvedValue({ empty: true }),
   mockCallable: vi.fn().mockResolvedValue({ data: { success: true } }),
   mockHttpsCallable: vi.fn(),
 }));
@@ -22,9 +24,12 @@ vi.mock('@angular/fire/firestore', () => ({
   doc: vi.fn((_fs, path, id) => ({ path, id })),
   addDoc: (...args: unknown[]) => mockAddDoc(...args),
   updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
+  deleteDoc: (...args: unknown[]) => mockDeleteDoc(...args),
+  getDocs: (...args: unknown[]) => mockGetDocs(...args),
   arrayRemove: vi.fn((value: unknown) => ({ arrayRemove: value })),
   query: vi.fn((...args: unknown[]) => args),
   where: vi.fn((field: string, op: string, value: unknown) => ({ field, op, value })),
+  limit: vi.fn((n: number) => ({ limit: n })),
   serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP'),
 }));
 
@@ -40,6 +45,8 @@ describe('GroupsService', () => {
   beforeEach(() => {
     mockAddDoc.mockClear().mockResolvedValue({ id: 'new-group-id' });
     mockUpdateDoc.mockClear();
+    mockDeleteDoc.mockClear();
+    mockGetDocs.mockClear().mockResolvedValue({ empty: true });
     mockHttpsCallable.mockClear().mockReturnValue(mockCallable);
     mockCallable.mockClear().mockResolvedValue({ data: { success: true } });
     vi.mocked(FirebaseAuthentication.getCurrentUser).mockReset().mockResolvedValue({ user: null });
@@ -129,5 +136,25 @@ describe('GroupsService', () => {
     expect(mockHttpsCallable).toHaveBeenCalledWith(expect.anything(), 'getKnownContacts');
     expect(mockCallable).toHaveBeenCalledWith(undefined);
     expect(contacts).toEqual([{ uid: 'u2', displayName: 'Ana', email: 'ana@example.com', photoURL: '' }]);
+  });
+
+  it('removes a group with no linked movements or settlements', async () => {
+    await service.remove('group1');
+
+    expect(mockDeleteDoc).toHaveBeenCalledWith({ path: 'groups', id: 'group1' });
+  });
+
+  it('refuses to remove a group that still has shared movements', async () => {
+    mockGetDocs.mockResolvedValueOnce({ empty: false }).mockResolvedValueOnce({ empty: true });
+
+    await expect(service.remove('group1')).rejects.toThrow(/gastos registrados/);
+    expect(mockDeleteDoc).not.toHaveBeenCalled();
+  });
+
+  it('refuses to remove a group that still has settlements', async () => {
+    mockGetDocs.mockResolvedValueOnce({ empty: true }).mockResolvedValueOnce({ empty: false });
+
+    await expect(service.remove('group1')).rejects.toThrow(/gastos registrados/);
+    expect(mockDeleteDoc).not.toHaveBeenCalled();
   });
 });

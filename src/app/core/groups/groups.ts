@@ -6,7 +6,10 @@ import {
   arrayRemove,
   collection,
   collectionData,
+  deleteDoc,
   doc,
+  getDocs,
+  limit,
   query,
   serverTimestamp,
   updateDoc,
@@ -71,6 +74,24 @@ export class GroupsService {
   // así que esto se hace directo contra Firestore, sin pasar por una function.
   async removeMember(groupId: string, memberUid: string): Promise<void> {
     await updateDoc(doc(this.firestore, 'groups', groupId), { members: arrayRemove(memberUid) });
+  }
+
+  // Elimina el grupo completo (solo createdBy/admin — ya lo exige la regla
+  // de Firestore, no hace falta una Cloud Function). Antes verifica que no
+  // tenga gastos compartidos registrados: antes de Fase 5 esto nunca se
+  // dispara (no existen movements/settlements de grupo todavía), pero la
+  // guarda queda lista para cuando sí existan.
+  async remove(groupId: string): Promise<void> {
+    const [movementsSnap, settlementsSnap] = await Promise.all([
+      getDocs(query(collection(this.firestore, 'movements'), where('groupId', '==', groupId), limit(1))),
+      getDocs(query(collection(this.firestore, 'settlements'), where('groupId', '==', groupId), limit(1))),
+    ]);
+
+    if (!movementsSnap.empty || !settlementsSnap.empty) {
+      throw new Error('No puedes eliminar un grupo con gastos registrados.');
+    }
+
+    await deleteDoc(doc(this.firestore, 'groups', groupId));
   }
 
   async inviteByEmail(groupId: string, email: string): Promise<void> {

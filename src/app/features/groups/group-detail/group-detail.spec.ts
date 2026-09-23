@@ -6,13 +6,15 @@ import { Auth } from '../../../core/auth/auth';
 import { GroupsService } from '../../../core/groups/groups';
 import { GroupDetail } from './group-detail';
 
-const { mockImpact } = vi.hoisted(() => ({
+const { mockImpact, mockNotification } = vi.hoisted(() => ({
   mockImpact: vi.fn().mockResolvedValue(undefined),
+  mockNotification: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@capacitor/haptics', () => ({
-  Haptics: { impact: mockImpact },
+  Haptics: { impact: mockImpact, notification: mockNotification },
   ImpactStyle: { Light: 'LIGHT', Medium: 'MEDIUM', Heavy: 'HEAVY' },
+  NotificationType: { Success: 'SUCCESS', Warning: 'WARNING', Error: 'ERROR' },
 }));
 
 // getMemberProfiles()/getKnownContacts() encadenan .then().catch().finally()
@@ -42,6 +44,7 @@ describe('GroupDetail (viewed by the creator)', () => {
   let fixture: ComponentFixture<GroupDetail>;
   let leave: ReturnType<typeof vi.fn>;
   let removeMember: ReturnType<typeof vi.fn>;
+  let remove: ReturnType<typeof vi.fn>;
   let inviteByEmail: ReturnType<typeof vi.fn>;
   let inviteByUid: ReturnType<typeof vi.fn>;
   let getMemberProfiles: ReturnType<typeof vi.fn>;
@@ -49,8 +52,10 @@ describe('GroupDetail (viewed by the creator)', () => {
 
   beforeEach(async () => {
     mockImpact.mockClear();
+    mockNotification.mockClear();
     leave = vi.fn().mockResolvedValue(undefined);
     removeMember = vi.fn().mockResolvedValue(undefined);
+    remove = vi.fn().mockResolvedValue(undefined);
     inviteByEmail = vi.fn().mockResolvedValue(undefined);
     inviteByUid = vi.fn().mockResolvedValue(undefined);
     getMemberProfiles = vi.fn().mockResolvedValue(fakeMemberProfiles);
@@ -59,13 +64,14 @@ describe('GroupDetail (viewed by the creator)', () => {
     await TestBed.configureTestingModule({
       imports: [GroupDetail],
       providers: [
-        { provide: Auth, useValue: { currentUser: { uid: 'u1', email: 'diego@example.com' } } },
+        { provide: Auth, useValue: { currentUser: { uid: 'u1', email: 'diego@example.com' }, isAdmin: false } },
         {
           provide: GroupsService,
           useValue: {
             groups$: of([fakeGroup]),
             leave,
             removeMember,
+            remove,
             inviteByEmail,
             inviteByUid,
             getMemberProfiles,
@@ -91,8 +97,8 @@ describe('GroupDetail (viewed by the creator)', () => {
     expect(component.group()).toEqual(fakeGroup);
   });
 
-  it('is the creator', () => {
-    expect(component.isCreator()).toBe(true);
+  it('is the creator, so it can manage the group', () => {
+    expect(component.canManageGroup()).toBe(true);
   });
 
   it('loads member profiles for the group', () => {
@@ -106,6 +112,65 @@ describe('GroupDetail (viewed by the creator)', () => {
 
     expect(labels).toContain('Salir');
     expect(labels).toContain('Eliminar');
+  });
+
+  it('shows "Eliminar grupo" to the creator, with no confirmation visible yet', () => {
+    const buttons = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button'));
+    const labels = buttons.map((b) => b.textContent?.trim());
+
+    expect(labels).toContain('Eliminar grupo');
+    expect(component.confirmingDeleteGroup()).toBe(false);
+    expect(fixture.nativeElement.querySelector('.mfx-group-detail__confirm')).toBeNull();
+  });
+
+  it('confirmDeleteGroup() shows the inline confirmation and buzzes a warning notification', () => {
+    component.confirmDeleteGroup();
+    fixture.detectChanges();
+
+    expect(component.confirmingDeleteGroup()).toBe(true);
+    expect(fixture.nativeElement.querySelector('.mfx-group-detail__confirm').textContent).toContain(
+      '¿Seguro que quieres eliminar este grupo? Esta acción no se puede deshacer'
+    );
+    expect(mockNotification).toHaveBeenCalledWith({ type: 'WARNING' });
+  });
+
+  it('cancelDeleteGroup() hides the confirmation again without deleting anything', () => {
+    component.confirmDeleteGroup();
+    component.cancelDeleteGroup();
+    fixture.detectChanges();
+
+    expect(component.confirmingDeleteGroup()).toBe(false);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('deleteGroup() removes the group, buzzes success, and emits left', async () => {
+    const emitted: void[] = [];
+    component.left.subscribe(() => emitted.push(undefined));
+    component.confirmDeleteGroup();
+    mockNotification.mockClear();
+
+    await component.deleteGroup();
+
+    expect(remove).toHaveBeenCalledWith('group1');
+    expect(mockNotification).toHaveBeenCalledWith({ type: 'SUCCESS' });
+    expect(emitted.length).toBe(1);
+  });
+
+  it('shows the "gastos registrados" guard message inline if deleting is blocked, without emitting left', async () => {
+    remove.mockRejectedValue(new Error('No puedes eliminar un grupo con gastos registrados.'));
+    const emitted: void[] = [];
+    component.left.subscribe(() => emitted.push(undefined));
+    component.confirmDeleteGroup();
+
+    await component.deleteGroup();
+    fixture.detectChanges();
+
+    expect(component.deleteError()).toBe('No puedes eliminar un grupo con gastos registrados.');
+    expect(component.confirmingDeleteGroup()).toBe(false);
+    expect(emitted.length).toBe(0);
+    expect(fixture.nativeElement.querySelector('.mfx-form__error').textContent).toContain(
+      'No puedes eliminar un grupo con gastos registrados.'
+    );
   });
 
   it('leave() calls the service and emits left on success', async () => {
@@ -263,13 +328,14 @@ describe('GroupDetail (viewed by a non-creator member)', () => {
     await TestBed.configureTestingModule({
       imports: [GroupDetail],
       providers: [
-        { provide: Auth, useValue: { currentUser: { uid: 'u2', email: 'ana@example.com' } } },
+        { provide: Auth, useValue: { currentUser: { uid: 'u2', email: 'ana@example.com' }, isAdmin: false } },
         {
           provide: GroupsService,
           useValue: {
             groups$: of([fakeGroup]),
             leave: vi.fn(),
             removeMember: vi.fn(),
+            remove: vi.fn(),
             inviteByEmail: vi.fn(),
             inviteByUid: vi.fn(),
             getMemberProfiles: vi.fn().mockResolvedValue(fakeMemberProfiles),
@@ -287,8 +353,15 @@ describe('GroupDetail (viewed by a non-creator member)', () => {
     fixture.detectChanges();
   });
 
-  it('is not the creator', () => {
-    expect(component.isCreator()).toBe(false);
+  it('is neither the creator nor the admin, so it cannot manage the group', () => {
+    expect(component.canManageGroup()).toBe(false);
+  });
+
+  it('does not show "Eliminar grupo" to a non-creator, non-admin member', () => {
+    const buttons = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button'));
+    const labels = buttons.map((b) => b.textContent?.trim());
+
+    expect(labels).not.toContain('Eliminar grupo');
   });
 
   it('only shows "Salir" for itself, never "Eliminar" on someone else\'s row', () => {
@@ -300,6 +373,54 @@ describe('GroupDetail (viewed by a non-creator member)', () => {
   });
 });
 
+describe('GroupDetail (viewed by an admin who is not the creator)', () => {
+  let component: GroupDetail;
+  let fixture: ComponentFixture<GroupDetail>;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [GroupDetail],
+      providers: [
+        // Admin real (isAdmin() en firestore.rules), pero no createdBy de
+        // este grupo — la UI debe tratarlo igual que al creador.
+        { provide: Auth, useValue: { currentUser: { uid: 'admin-uid', email: 'admin@example.com' }, isAdmin: true } },
+        {
+          provide: GroupsService,
+          useValue: {
+            groups$: of([fakeGroup]),
+            leave: vi.fn(),
+            removeMember: vi.fn(),
+            remove: vi.fn(),
+            inviteByEmail: vi.fn(),
+            inviteByUid: vi.fn(),
+            getMemberProfiles: vi.fn().mockResolvedValue(fakeMemberProfiles),
+            getKnownContacts: vi.fn().mockResolvedValue(fakeContacts),
+          },
+        },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(GroupDetail);
+    fixture.componentRef.setInput('groupId', 'group1');
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    await flushMicrotasks();
+    fixture.detectChanges();
+  });
+
+  it('can manage the group despite not being its creator', () => {
+    expect(component.canManageGroup()).toBe(true);
+  });
+
+  it('shows "Eliminar" on other members\' rows and "Eliminar grupo"', () => {
+    const buttons = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button'));
+    const labels = buttons.map((b) => b.textContent?.trim());
+
+    expect(labels).toContain('Eliminar');
+    expect(labels).toContain('Eliminar grupo');
+  });
+});
+
 describe('GroupDetail with no suggested contacts', () => {
   let component: GroupDetail;
   let fixture: ComponentFixture<GroupDetail>;
@@ -308,13 +429,14 @@ describe('GroupDetail with no suggested contacts', () => {
     await TestBed.configureTestingModule({
       imports: [GroupDetail],
       providers: [
-        { provide: Auth, useValue: { currentUser: { uid: 'u1', email: 'diego@example.com' } } },
+        { provide: Auth, useValue: { currentUser: { uid: 'u1', email: 'diego@example.com' }, isAdmin: false } },
         {
           provide: GroupsService,
           useValue: {
             groups$: of([fakeGroup]),
             leave: vi.fn(),
             removeMember: vi.fn(),
+            remove: vi.fn(),
             inviteByEmail: vi.fn(),
             inviteByUid: vi.fn(),
             getMemberProfiles: vi.fn().mockResolvedValue(fakeMemberProfiles),

@@ -7,6 +7,11 @@ import { GoogleAuthProvider, signInWithCredential, signOut as signOutFromFirebas
 
 import type { User } from '../../models/user.model';
 
+// Mismo uid y mismo criterio que isAdmin() en firestore.rules — no hay
+// nada secreto que proteger acá (el uid ya está committeado en las reglas),
+// solo se replica del lado del cliente para poder mostrar/ocultar UI.
+const ADMIN_UID = 'jigrWtmRAraKgs6aJSS4OMq9gaX2';
+
 @Injectable({
   providedIn: 'root',
 })
@@ -35,6 +40,10 @@ export class Auth {
   get currentUser(): AuthUser | null {
     const value = this.authState.value;
     return value === undefined ? null : value;
+  }
+
+  get isAdmin(): boolean {
+    return this.currentUser?.uid === ADMIN_UID;
   }
 
   async signInWithGoogle(): Promise<AuthUser | null> {
