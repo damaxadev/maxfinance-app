@@ -1,0 +1,20 @@
+@if (photoUrl() && !photoLoadError()) {
+  <img
+    class="mfx-avatar"
+    [style.width.px]="size()"
+    [style.height.px]="size()"
+    [src]="photoUrl()"
+    [alt]="displayName() || 'Foto de perfil'"
+    (error)="onError()"
+  />
+} @else {
+  <span
+    class="mfx-avatar mfx-avatar--fallback"
+    [style.width.px]="size()"
+    [style.height.px]="size()"
+    [style.font-size.px]="size() * 0.45"
+    [attr.aria-label]="displayName() || 'Foto de perfil'"
+  >
+    {{ initial() }}
+  </span>
+}

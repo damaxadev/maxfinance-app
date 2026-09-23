@@ -13,20 +13,14 @@
     } @else {
       @for (member of members(); track member.uid) {
         <div class="mfx-group-detail__member">
-          @if (member.photoURL) {
-            <img class="mfx-group-detail__avatar" [src]="member.photoURL" [alt]="member.displayName" />
-          } @else {
-            <span class="mfx-group-detail__avatar mfx-group-detail__avatar--fallback">{{
-              initialOf(member.displayName)
-            }}</span>
-          }
+          <mfx-avatar [photoUrl]="member.photoURL" [displayName]="member.displayName" [size]="32" />
           <span class="mfx-group-detail__name">{{ member.displayName || 'Sin nombre' }}</span>
 
           @if (member.uid === currentUid()) {
             <button type="button" class="mfx-btn-danger" [disabled]="pendingUid() === member.uid" (click)="leave()">
               {{ pendingUid() === member.uid ? 'Saliendo…' : 'Salir' }}
             </button>
-          } @else if (isCreator()) {
+          } @else if (canManageGroup()) {
             <button
               type="button"
               class="mfx-btn-danger"
@@ -57,13 +51,7 @@
             [disabled]="invitingContactUid() === contact.uid"
             (click)="inviteContact(contact)"
           >
-            @if (contact.photoURL) {
-              <img class="mfx-group-detail__chip-avatar" [src]="contact.photoURL" [alt]="contact.displayName" />
-            } @else {
-              <span class="mfx-group-detail__chip-avatar mfx-group-detail__chip-avatar--fallback">{{
-                initialOf(contact.displayName)
-              }}</span>
-            }
+            <mfx-avatar [photoUrl]="contact.photoURL" [displayName]="contact.displayName" [size]="24" />
             <span>
               @if (justInvitedUids().has(contact.uid)) {
                 Invitado ✓
@@ -110,5 +98,36 @@
         </button>
       </div>
     </form>
+
+    @if (canManageGroup()) {
+      <div class="mfx-section-header">
+        <h4>Zona de peligro</h4>
+      </div>
+
+      @if (!confirmingDeleteGroup()) {
+        <button type="button" class="mfx-btn-danger" (click)="confirmDeleteGroup()">Eliminar grupo</button>
+      } @else {
+        <div class="mfx-group-detail__confirm">
+          <p>¿Seguro que quieres eliminar este grupo? Esta acción no se puede deshacer.</p>
+          <div class="mfx-form__actions">
+            <button
+              type="button"
+              class="mfx-group-detail__cancel"
+              [disabled]="deletingGroup()"
+              (click)="cancelDeleteGroup()"
+            >
+              Cancelar
+            </button>
+            <button type="button" class="mfx-btn-danger" [disabled]="deletingGroup()" (click)="deleteGroup()">
+              {{ deletingGroup() ? 'Eliminando…' : 'Sí, eliminar' }}
+            </button>
+          </div>
+        </div>
+      }
+
+      @if (deleteError()) {
+        <p class="mfx-form__error" role="alert">{{ deleteError() }}</p>
+      }
+    }
   </div>
 }

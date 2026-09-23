@@ -1,0 +1,18 @@
+:host {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.mfx-avatar {
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+
+  &--fallback {
+    display: grid;
+    place-items: center;
+    background: var(--primary);
+    color: var(--bg);
+    font-weight: 600;
+  }
+}

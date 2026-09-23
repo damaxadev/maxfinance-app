@@ -1,16 +1,17 @@
 import { Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { type AbstractControl, FormBuilder, ReactiveFormsModule, type ValidationErrors, Validators } from '@angular/forms';
-import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 
 import { Auth } from '../../../core/auth/auth';
 import { GroupsService, type GroupMemberProfile } from '../../../core/groups/groups';
+import { Avatar } from '../../../shared/avatar/avatar';
 
 const JUST_INVITED_DURATION_MS = 2000;
 
 @Component({
   selector: 'mfx-group-detail',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, Avatar],
   templateUrl: './group-detail.html',
   styleUrl: './group-detail.scss',
 })
@@ -26,9 +27,12 @@ export class GroupDetail {
   readonly group = computed(() => this.groups().find((g) => g.id === this.groupId()) ?? null);
 
   readonly currentUid = computed(() => this.auth.currentUser?.uid ?? null);
-  readonly isCreator = computed(() => {
+  // "Eliminar miembro" y "Eliminar grupo" son acciones de creador — pero la
+  // regla de Firestore también las permite al admin (isAdmin() en
+  // firestore.rules), así que la UI tiene que espejar ese mismo bypass.
+  readonly canManageGroup = computed(() => {
     const group = this.group();
-    return !!group && group.createdBy === this.currentUid();
+    return !!group && (group.createdBy === this.currentUid() || this.auth.isAdmin);
   });
 
   readonly members = signal<GroupMemberProfile[]>([]);
@@ -39,6 +43,10 @@ export class GroupDetail {
   // deshabilita el botón de esa fila, no todo el modal.
   readonly pendingUid = signal<string | null>(null);
   readonly actionError = signal<string | null>(null);
+
+  readonly confirmingDeleteGroup = signal(false);
+  readonly deletingGroup = signal(false);
+  readonly deleteError = signal<string | null>(null);
 
   // Contactos sugeridos: gente con la que ya se comparte ALGÚN grupo (no
   // depende de cuál se está viendo ahora — ver GroupsService.getKnownContacts).
@@ -98,10 +106,6 @@ export class GroupDetail {
     );
   }
 
-  initialOf(displayName: string): string {
-    return (displayName.trim()[0] ?? '?').toUpperCase();
-  }
-
   async leave(): Promise<void> {
     const group = this.group();
     const uid = this.currentUid();
@@ -139,6 +143,38 @@ export class GroupDetail {
       this.actionError.set('No pudimos eliminar a esta persona.');
     } finally {
       this.pendingUid.set(null);
+    }
+  }
+
+  confirmDeleteGroup(): void {
+    this.confirmingDeleteGroup.set(true);
+    this.deleteError.set(null);
+    void this.notify(NotificationType.Warning);
+  }
+
+  cancelDeleteGroup(): void {
+    this.confirmingDeleteGroup.set(false);
+  }
+
+  async deleteGroup(): Promise<void> {
+    const group = this.group();
+    if (!group) {
+      return;
+    }
+
+    this.deletingGroup.set(true);
+    this.deleteError.set(null);
+
+    try {
+      await this.groupsService.remove(group.id);
+      void this.notify(NotificationType.Success);
+      this.left.emit();
+    } catch (error) {
+      console.error('Error al eliminar el grupo', error);
+      this.deleteError.set(error instanceof Error ? error.message : 'No pudimos eliminar el grupo.');
+      this.confirmingDeleteGroup.set(false);
+    } finally {
+      this.deletingGroup.set(false);
     }
   }
 
@@ -220,6 +256,14 @@ export class GroupDetail {
   private async buzz(): Promise<void> {
     try {
       await Haptics.impact({ style: ImpactStyle.Light });
+    } catch {
+      // Sin soporte háptico (navegador de escritorio) — no bloquea la UI.
+    }
+  }
+
+  private async notify(type: NotificationType): Promise<void> {
+    try {
+      await Haptics.notification({ type });
     } catch {
       // Sin soporte háptico (navegador de escritorio) — no bloquea la UI.
     }

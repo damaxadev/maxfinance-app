@@ -1,17 +1,6 @@
 <main class="mfx-profile">
   @if (currentUser(); as user) {
-    @if (user.photoUrl && !photoLoadError()) {
-      <img
-        class="mfx-profile__photo"
-        [src]="user.photoUrl"
-        [alt]="user.displayName ?? 'Foto de perfil'"
-        (error)="onPhotoError()"
-      />
-    } @else {
-      <div class="mfx-profile__photo mfx-profile__photo--fallback" [attr.aria-label]="user.displayName ?? 'Foto de perfil'">
-        {{ photoInitial() }}
-      </div>
-    }
+    <mfx-avatar [photoUrl]="user.photoUrl" [displayName]="user.displayName ?? ''" [size]="96" />
 
     <mfx-card class="mfx-profile__card">
       <label class="mfx-profile__field">

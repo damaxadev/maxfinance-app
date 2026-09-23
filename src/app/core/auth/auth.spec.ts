@@ -26,10 +26,22 @@ vi.mock('firebase/auth', () => ({
 
 describe('Auth', () => {
   let service: Auth;
+  // authStateChange no dispara solo por mockear addListener (es un stub que
+  // solo resuelve una promesa, no un event bus real) — se captura el
+  // callback para poder simularlo manualmente en los tests que lo necesitan.
+  let authStateChangeCallback: ((event: { user: unknown }) => void) | undefined;
 
   beforeEach(() => {
+    authStateChangeCallback = undefined;
     vi.mocked(FirebaseAuthentication.getCurrentUser).mockReset().mockResolvedValue({ user: null });
-    vi.mocked(FirebaseAuthentication.addListener).mockReset().mockResolvedValue({ remove: vi.fn() });
+    vi.mocked(FirebaseAuthentication.addListener)
+      .mockReset()
+      .mockImplementation(((eventName: string, callback: (event: { user: unknown }) => void) => {
+        if (eventName === 'authStateChange') {
+          authStateChangeCallback = callback;
+        }
+        return Promise.resolve({ remove: vi.fn() });
+      }) as unknown as typeof FirebaseAuthentication.addListener);
     vi.mocked(FirebaseAuthentication.signInWithGoogle).mockReset();
     vi.mocked(FirebaseAuthentication.signOut).mockReset().mockResolvedValue(undefined);
     mockCredential.mockClear();
@@ -83,5 +95,21 @@ describe('Auth', () => {
 
     expect(FirebaseAuthentication.signOut).toHaveBeenCalled();
     expect(mockJsSignOut).toHaveBeenCalledWith(expect.anything());
+  });
+
+  it('is not admin with no user signed in', () => {
+    expect(service.isAdmin).toBe(false);
+  });
+
+  it('is not admin for a regular (non-admin) user', () => {
+    authStateChangeCallback?.({ user: { uid: 'some-regular-uid' } });
+
+    expect(service.isAdmin).toBe(false);
+  });
+
+  it('is admin when the signed-in uid matches the hardcoded admin uid (same one as isAdmin() in firestore.rules)', () => {
+    authStateChangeCallback?.({ user: { uid: 'jigrWtmRAraKgs6aJSS4OMq9gaX2' } });
+
+    expect(service.isAdmin).toBe(true);
   });
 });
