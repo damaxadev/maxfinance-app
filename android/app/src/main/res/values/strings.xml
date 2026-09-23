@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MaxFinance</string>
+    <string name="title_activity_main">MaxFinance</string>
+    <string name="package_name">com.maxfinance.app</string>
+    <string name="custom_url_scheme">com.maxfinance.app</string>
+</resources>

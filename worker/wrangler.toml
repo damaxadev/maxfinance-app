@@ -1,0 +1,15 @@
+name = "maxfinance-worker"
+main = "src/index.ts"
+compatibility_date = "2026-09-21"
+
+[observability]
+enabled = true
+
+# Non-secret config. Safe to commit.
+[vars]
+FIREBASE_PROJECT_ID = "maxfinance-app"
+
+# Secrets are NOT declared here — never hardcode them in this file.
+# Set them with `wrangler secret put <NAME>` (see README / .dev.vars.example):
+#   ANTHROPIC_API_KEY  — Anthropic API key used by the /summary endpoint (Fase 7)
+#   INTERNAL_KEY       — shared secret for server-to-server calls from Cloud Functions

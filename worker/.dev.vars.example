@@ -1,0 +1,6 @@
+# Plantilla — copia este archivo a .dev.vars (ignorado por git) para
+# desarrollo local con `wrangler dev`. En producción, estos mismos nombres
+# se configuran como secrets con `wrangler secret put <NAME>`.
+
+ANTHROPIC_API_KEY=
+INTERNAL_KEY=
