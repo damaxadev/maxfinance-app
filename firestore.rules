@@ -17,7 +17,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && request.auth.uid == 'REEMPLAZAR_DESPUES_DE_FASE_1';
+      return isSignedIn() && request.auth.uid == 'jigrWtmRAraKgs6aJSS4OMq9gaX2';
     }
 
     // users — doc id == uid
