@@ -32,53 +32,57 @@ Ver `DESIGN.md` para el detalle completo de paleta, tipografía y filosofía de 
 20. Anillo de progreso animado para presupuesto (% usado por categoría)
 21. Integrar `canvas-confetti` para celebración al saldar una deuda (el disparo real se conecta en Fase 5; el componente se define acá)
 22. Integrar `@capacitor/haptics` — feedback táctil en acciones clave (guardar, saldar deuda, error)
+23. Floating Action Button (FAB) con menú tipo speed-dial (inspirado en el botón "+" de Google Drive) — animación de apertura/cierre, ícono que rota; las opciones son placeholder por ahora, se conectan a acciones reales en Fases 3 y 5
+24. Re-aplicar el sistema de diseño (tokens, tipografía, `mfx-card`) a Login y Perfil — se construyeron en Fase 1, antes de que existiera `DESIGN.md`
 
 ## Fase 3 — Movimientos personales
-23. CRUD de `accounts`
-24. `categories` base (seed) + custom por usuario
-25. CRUD de `movements` personales (ingreso/gasto)
-26. Lista de movimientos con filtro por cuenta/categoría/fecha
-27. Balance rápido por cuenta (usa el contador animado de Fase 2)
-28. Reglas de seguridad Firestore para accounts/categories/movements
+25. CRUD de `accounts`
+26. `categories` base (seed) + custom por usuario
+27. CRUD de `movements` personales (ingreso/gasto)
+28. Lista de movimientos con filtro por cuenta/categoría/fecha
+29. Balance rápido por cuenta (usa el contador animado de Fase 2)
+30. Reglas de seguridad Firestore para accounts/categories/movements
+31. Conectar la opción "Agregar movimiento" del FAB al formulario real
 
 ## Fase 4 — Grupos
-29. Crear grupo (`groups`)
-30. Invitar miembro por email → Cloud Function callable que resuelve a uid
-31. Pantalla de gestión de miembros (salir / eliminar si eres creador)
-32. Selector de grupo activo en la UI
-33. Reglas de seguridad para `groups`
+32. Crear grupo (`groups`)
+33. Invitar miembro por email → Cloud Function callable que resuelve a uid
+34. Pantalla de gestión de miembros (salir / eliminar si eres creador)
+35. Selector de grupo activo en la UI
+36. Reglas de seguridad para `groups`
 
 ## Fase 5 — Gastos compartidos (MVP real)
-34. Formulario de gasto compartido: quién pagó + grupo
-35. División igual — cálculo automático
-36. División por porcentaje — validación que sume 100%
-37. División por monto fijo — validación que sume el total
-38. Cálculo de balance por grupo (neteo de deudas) — función pura + tests
-39. `settlements` — marcar deuda como saldada (dispara confetti + haptic de Fase 2)
-40. Reglas de seguridad para movimientos compartidos y settlements
+37. Formulario de gasto compartido: quién pagó + grupo
+38. División igual — cálculo automático
+39. División por porcentaje — validación que sume 100%
+40. División por monto fijo — validación que sume el total
+41. Cálculo de balance por grupo (neteo de deudas) — función pura + tests
+42. `settlements` — marcar deuda como saldada (dispara confetti + haptic de Fase 2)
+43. Reglas de seguridad para movimientos compartidos y settlements
+44. Conectar la opción "Agregar gasto compartido" del FAB al formulario real
 
 ## Fase 6 — Presupuesto + recurrentes
-41. CRUD de `budgets` (límite mensual por categoría)
-42. Alerta visual al acercarse/superar presupuesto (usa el anillo de progreso de Fase 2)
-43. CRUD de `recurringPayments`
-44. Cloud Function programada: genera el movimiento + dispara notificación
-45. Integración con Cloud Messaging (permisos, token, recepción)
+45. CRUD de `budgets` (límite mensual por categoría)
+46. Alerta visual al acercarse/superar presupuesto (usa el anillo de progreso de Fase 2)
+47. CRUD de `recurringPayments`
+48. Cloud Function programada: genera el movimiento + dispara notificación
+49. Integración con Cloud Messaging (permisos, token, recepción)
 
 ## Fase 7 — Dashboard
-46. Balance rápido personal + resumen de deudas por grupo
-47. Gráfica de tendencia de gasto mensual
-48. Gráfica de gasto por categoría
-49. Saludo dinámico en el dashboard (la navegación ya quedó lista en Fase 2)
+50. Balance rápido personal + resumen de deudas por grupo
+51. Gráfica de tendencia de gasto mensual
+52. Gráfica de gasto por categoría
+53. Saludo dinámico en el dashboard (la navegación ya quedó lista en Fase 2)
 
 ## Fase 8 — IA (vía el Worker)
-50. Endpoint del Worker: resumen financiero en lenguaje natural
-51. Botón "¿Qué me dices este mes?" en el dashboard
-52. Insight automático mensual (trigger Firestore + Cloud Function → Worker)
-53. Control de costo/uso de IA visible al usuario
+54. Endpoint del Worker: resumen financiero en lenguaje natural
+55. Botón "¿Qué me dices este mes?" en el dashboard
+56. Insight automático mensual (trigger Firestore + Cloud Function → Worker)
+57. Control de costo/uso de IA visible al usuario
 
 ## Fase 9 — Pulido final
-54. Ícono de la app + splash screen
-55. Ajustes finos de diseño con datos reales ya cargados
+58. Ícono de la app + splash screen
+59. Ajustes finos de diseño con datos reales ya cargados
 
 ## Backlog post-MVP
 - Multi-moneda

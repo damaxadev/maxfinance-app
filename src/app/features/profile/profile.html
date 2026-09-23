@@ -1,23 +1,36 @@
 <main class="mfx-profile">
   @if (currentUser(); as user) {
-    <img class="mfx-profile__photo" [src]="user.photoUrl ?? ''" [alt]="user.displayName ?? 'Foto de perfil'" />
-
-    <label class="mfx-profile__field">
-      Nombre
-      <input type="text" [value]="displayNameDraft()" (input)="onDisplayNameInput($any($event.target).value)" />
-    </label>
-
-    <button type="button" [disabled]="saving()" (click)="save()">
-      {{ saving() ? 'Guardando…' : 'Guardar cambios' }}
-    </button>
-
-    @if (saved()) {
-      <p class="mfx-profile__success">Cambios guardados.</p>
+    @if (user.photoUrl && !photoLoadError()) {
+      <img
+        class="mfx-profile__photo"
+        [src]="user.photoUrl"
+        [alt]="user.displayName ?? 'Foto de perfil'"
+        (error)="onPhotoError()"
+      />
+    } @else {
+      <div class="mfx-profile__photo mfx-profile__photo--fallback" [attr.aria-label]="user.displayName ?? 'Foto de perfil'">
+        {{ photoInitial() }}
+      </div>
     }
 
-    @if (errorMessage()) {
-      <p class="mfx-profile__error" role="alert">{{ errorMessage() }}</p>
-    }
+    <mfx-card class="mfx-profile__card">
+      <label class="mfx-profile__field">
+        Nombre
+        <input type="text" [value]="displayNameDraft()" (input)="onDisplayNameInput($any($event.target).value)" />
+      </label>
+
+      <button type="button" class="mfx-profile__save" [disabled]="saving()" (click)="save()">
+        {{ saving() ? 'Guardando…' : 'Guardar cambios' }}
+      </button>
+
+      @if (saved()) {
+        <p class="mfx-profile__success">Cambios guardados.</p>
+      }
+
+      @if (errorMessage()) {
+        <p class="mfx-profile__error" role="alert">{{ errorMessage() }}</p>
+      }
+    </mfx-card>
 
     <button type="button" class="mfx-profile__signout" (click)="signOut()">Cerrar sesión</button>
   }

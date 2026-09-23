@@ -2,10 +2,11 @@ import { Component, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { Auth } from '../../core/auth/auth';
+import { Card } from '../../shared/card/card';
 
 @Component({
   selector: 'mfx-login',
-  imports: [],
+  imports: [Card],
   templateUrl: './login.html',
   styleUrl: './login.scss',
 })
@@ -23,7 +24,7 @@ export class Login {
     try {
       const user = await this.auth.signInWithGoogle();
       if (user) {
-        await this.router.navigate(['/perfil']);
+        await this.router.navigate(['/inicio']);
       }
     } catch (error) {
       console.error('Error al iniciar sesión con Google', error);

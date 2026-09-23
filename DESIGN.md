@@ -27,6 +27,7 @@ MaxFinance es "hermana" de Max Gym Tracker: mismo fondo oscuro, misma tipografí
 
 - **Bottom tab bar**, 5 secciones: Inicio, Movimientos, Grupos, Presupuesto, Ajustes
 - **Swiper.js** para deslizar horizontalmente entre las secciones principales, sincronizado con el tab activo (tocar un tab desliza el contenido; deslizar actualiza el tab resaltado)
+- **FAB (Floating Action Button)** flotante sobre la tab bar, menú tipo speed-dial (inspirado en el botón "+" de Google Drive) para acciones rápidas de creación — agregar movimiento, agregar gasto compartido
 
 ## Animaciones (Angular Animations + librerías)
 
