@@ -1,0 +1,12 @@
+.mfx-login {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem;
+  text-align: center;
+
+  &__error {
+    color: #b3261e;
+  }
+}
