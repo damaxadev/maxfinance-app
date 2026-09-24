@@ -39,7 +39,10 @@ body {
   flex-direction: column;
   gap: 1rem;
   padding: 1rem;
-  padding-bottom: 5rem; // deja espacio para la bottom tab bar
+  // Deja espacio para la bottom tab bar (fixed) + su propio safe-area-inset
+  // (muescas/home indicator de iOS/Android) — --mfx-tab-bar-height es un
+  // valor fijo que NO incluye el safe-area, hay que sumarlo acá.
+  padding-bottom: calc(var(--mfx-tab-bar-height) + env(safe-area-inset-bottom, 0px) + 1rem);
 
   h2 {
     margin: 0.5rem 0 0;
@@ -123,18 +126,6 @@ body {
 
   .mfx-form__field {
     flex: 1;
-  }
-}
-
-.mfx-form__field--checkbox {
-  flex-direction: row;
-  align-items: center;
-  gap: 0.5rem;
-
-  input[type='checkbox'] {
-    width: 1.125rem;
-    height: 1.125rem;
-    accent-color: var(--primary);
   }
 }
 

@@ -8,6 +8,7 @@ import { Categories } from '../../../core/categories/categories';
 import { GroupsService } from '../../../core/groups/groups';
 import { MovementsService } from '../../../core/movements/movements';
 import { SettlementsService } from '../../../core/settlements/settlements';
+import { SharedExpenseFormState } from '../../../core/shared-expense-form-state/shared-expense-form-state';
 import { GroupDetail } from './group-detail';
 
 // GroupBalance y GroupActivity (renderizados dentro de GroupDetail) inyectan
@@ -128,6 +129,18 @@ describe('GroupDetail (viewed by the creator)', () => {
 
   it('renders the "Actividad reciente" section', () => {
     expect(fixture.nativeElement.querySelector('mfx-group-activity')).toBeTruthy();
+  });
+
+  it('addExpense() opens the shared-expense form fixed to this group', () => {
+    const state = TestBed.inject(SharedExpenseFormState);
+    component.addExpense();
+
+    expect(state.request()).toEqual({ groupId: 'group1' });
+  });
+
+  it('renders the "+ Agregar gasto" button', () => {
+    const buttons = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button'));
+    expect(buttons.map((b) => b.textContent?.trim())).toContain('+ Agregar gasto');
   });
 
   it('loads member profiles for the group', () => {

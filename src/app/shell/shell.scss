@@ -5,3 +5,24 @@
 .mfx-shell__swiper {
   height: 100%;
 }
+
+// Swiper fija cada <swiper-slide> a height:100% (vía ::slotted(swiper-slide)
+// inyectado en el shadow root de <swiper-container>, ver node_modules/swiper/
+// swiper-element.mjs) y el <div class="swiper"> que lo envuelve tiene
+// overflow: hidden — necesario para recortar los slides inactivos durante el
+// swipe horizontal, pero sin overflow-y en el slide mismo, cualquier
+// contenido más alto que el viewport queda recortado por ese overflow:hidden
+// de arriba, sin scroll posible (no solo "tapado", literalmente inalcanzable).
+// swiper-slide es un elemento propio (no vive dentro del shadow root del
+// container, Angular sí lo escopea con el _ngcontent de Shell), así que
+// puede estilarse acá para agregar la única pieza que faltaba: el scroll
+// vertical propio de cada slide. touch-action: pan-y ya lo pone Swiper en su
+// contenedor (.swiper-horizontal) para dejar pasar el gesto vertical al
+// scroll nativo — no hacía falta nested:true, eso es para swipers anidados,
+// no para contenido scrolleable dentro de un slide.
+swiper-slide {
+  display: block;
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}

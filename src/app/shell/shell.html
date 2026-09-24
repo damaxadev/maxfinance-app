@@ -63,9 +63,9 @@
   </mfx-modal>
 }
 
-@if (sharedExpenseFormState.open()) {
+@if (sharedExpenseFormState.request(); as request) {
   <mfx-modal title="Gasto compartido" (closed)="sharedExpenseFormState.close()">
-    <mfx-shared-expense-form (saved)="sharedExpenseFormState.close()" />
+    <mfx-shared-expense-form [fixedGroupId]="request.groupId" (saved)="sharedExpenseFormState.close()" />
   </mfx-modal>
 }
 

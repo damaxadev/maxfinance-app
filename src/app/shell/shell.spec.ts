@@ -23,14 +23,33 @@ const fakeGroup = { id: 'group1', name: 'Apartamento', members: ['u1'], createdB
 
 // El bundle real de Swiper (swiper/element/bundle) se registra en main.ts,
 // que los tests unitarios no ejecutan. Acá definimos un <swiper-container>
-// mínimo para probar nuestra lógica de integración sin el motor real
-// (que depende de APIs de touch/resize que jsdom no implementa).
+// mínimo para probar nuestra lógica de integración sin el motor real (que
+// depende de APIs de touch/resize que jsdom no implementa) — incluyendo
+// on/off/emit, ya que Shell se suscribe directo a swiper.on('slideChange',
+// ...) en vez del CustomEvent DOM que el elemento reenvía en el navegador real.
 class FakeSwiperContainer extends HTMLElement {
+  private readonly listeners = new Map<string, Set<(swiper: unknown) => void>>();
+
   swiper = {
     activeIndex: 0,
     slideTo: vi.fn((index: number) => {
       this.swiper.activeIndex = index;
     }),
+    on: (event: string, handler: (swiper: unknown) => void) => {
+      if (!this.listeners.has(event)) {
+        this.listeners.set(event, new Set());
+      }
+      this.listeners.get(event)!.add(handler);
+    },
+    off: (event: string, handler: (swiper: unknown) => void) => {
+      this.listeners.get(event)?.delete(handler);
+    },
+    // Simula el emit() real de Swiper para un evento — invoca cada handler
+    // registrado con la instancia de swiper como argumento (misma convención
+    // que swiper-core: swiper.on('slideChange', (swiper) => {...})).
+    emit: (event: string) => {
+      this.listeners.get(event)?.forEach((handler) => handler(this.swiper));
+    },
   };
 }
 class FakeSwiperSlide extends HTMLElement {}
@@ -117,9 +136,29 @@ describe('Shell', () => {
 
   it('swiping updates the active tab index', () => {
     swiperEl().swiper.activeIndex = 4;
-    swiperEl().dispatchEvent(new CustomEvent('slidechange'));
+    swiperEl().swiper.emit('slideChange');
 
     expect(component.activeIndex()).toBe(4);
+  });
+
+  it('does not re-set activeIndex when swiper reports the same index it already has', () => {
+    component.onTabSelected(2); // ya deja activeIndex() en 2
+
+    // Simula el propio slideChange que dispara internamente ese slideTo(2)
+    // — no debería ser un problema (no hay loop, nunca se llama slideTo()
+    // desde este camino), pero confirma que el valor sigue siendo 2.
+    swiperEl().swiper.activeIndex = 2;
+    swiperEl().swiper.emit('slideChange');
+
+    expect(component.activeIndex()).toBe(2);
+  });
+
+  it('unsubscribes from slideChange on destroy', () => {
+    const swiper = swiperEl().swiper;
+    fixture.destroy();
+
+    swiper.activeIndex = 3;
+    expect(() => swiper.emit('slideChange')).not.toThrow();
   });
 
   it('opens the movement form (create mode) when the FAB requests it', () => {

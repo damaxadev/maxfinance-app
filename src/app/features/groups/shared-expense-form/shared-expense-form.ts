@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, output, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 
@@ -16,6 +16,17 @@ function toDateInputValue(date: Date): string {
   const mm = String(date.getMonth() + 1).padStart(2, '0');
   const dd = String(date.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
+}
+
+// Combina la fecha elegida en el <input type="date"> con la hora actual —
+// si se deja el valor por defecto (hoy, sin tocar el campo) el gasto queda
+// con el instante real de creación en vez de medianoche; si se elige una
+// fecha pasada, conserva esa fecha con la hora actual (no hay forma de
+// saber la hora real de un gasto pasado, pero al menos no queda en 00:00).
+function combineDateWithCurrentTime(dateInputValue: string): Date {
+  const [year, month, day] = dateInputValue.split('-').map(Number);
+  const now = new Date();
+  return new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
 }
 
 function round2(value: number): number {
@@ -63,7 +74,11 @@ export class SharedExpenseForm {
 
   readonly saved = output<void>();
 
-  readonly groupId = computed(() => this.activeGroup.groupId());
+  // Cuando se abre desde un grupo específico (GroupDetail, tarjeta de la
+  // lista de Grupos) fija ese grupo, sin depender del grupo activo. Cuando
+  // no se pasa (el FAB, que no cambia), sigue usando ActiveGroup.
+  readonly fixedGroupId = input<string | null>(null);
+  readonly groupId = computed(() => this.fixedGroupId() ?? this.activeGroup.groupId());
   readonly currentUid = computed(() => this.auth.currentUser?.uid ?? null);
 
   readonly splitTypes = SPLIT_TYPES;
@@ -230,7 +245,7 @@ export class SharedExpenseForm {
         categoryId: raw.categoryId,
         splitType: raw.splitType,
         splits,
-        date: new Date(`${raw.date}T00:00:00`),
+        date: combineDateWithCurrentTime(raw.date),
         note: raw.note,
       });
       this.saved.emit();

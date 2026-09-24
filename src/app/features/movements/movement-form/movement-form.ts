@@ -16,6 +16,17 @@ function toDateInputValue(date: Date): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+// Combina la fecha elegida en el <input type="date"> con la hora actual —
+// si se deja el valor por defecto (hoy, sin tocar el campo) el movimiento
+// queda con el instante real de creación en vez de medianoche; si se elige
+// una fecha pasada, conserva esa fecha con la hora actual (no hay forma de
+// saber la hora real de un gasto pasado, pero al menos no queda en 00:00).
+function combineDateWithCurrentTime(dateInputValue: string): Date {
+  const [year, month, day] = dateInputValue.split('-').map(Number);
+  const now = new Date();
+  return new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+}
+
 const MOVEMENT_TYPES: { value: MovementType; label: string }[] = [
   { value: 'expense', label: 'Gasto' },
   { value: 'income', label: 'Ingreso' },
@@ -145,7 +156,7 @@ export class MovementForm {
     this.saving.set(true);
     this.errorMessage.set(null);
     const raw = this.form.getRawValue();
-    const value = { ...raw, date: new Date(`${raw.date}T00:00:00`) };
+    const value = { ...raw, date: combineDateWithCurrentTime(raw.date) };
 
     try {
       const existing = this.initialValue();

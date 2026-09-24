@@ -1,5 +1,12 @@
 import { Injectable, signal } from '@angular/core';
 
+export interface SharedExpenseFormRequest {
+  // Grupo fijado desde donde se disparó la acción (GroupDetail, tarjeta de
+  // la lista de Grupos) — null cuando viene del FAB, que sigue usando el
+  // grupo activo (ActiveGroup) sin cambios.
+  groupId: string | null;
+}
+
 /**
  * Estado compartido del modal de "gasto compartido" — se renderiza a nivel
  * de Shell (mismo motivo que GroupFormState/AccountFormState: Swiper
@@ -10,14 +17,14 @@ import { Injectable, signal } from '@angular/core';
   providedIn: 'root',
 })
 export class SharedExpenseFormState {
-  private readonly _open = signal(false);
-  readonly open = this._open.asReadonly();
+  private readonly _request = signal<SharedExpenseFormRequest | null>(null);
+  readonly request = this._request.asReadonly();
 
-  openCreate(): void {
-    this._open.set(true);
+  openCreate(groupId?: string): void {
+    this._request.set({ groupId: groupId ?? null });
   }
 
   close(): void {
-    this._open.set(false);
+    this._request.set(null);
   }
 }

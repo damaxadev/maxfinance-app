@@ -83,6 +83,16 @@ describe('SettlementForm (viewed by the payer, u1)', () => {
     expect(emitted.length).toBe(1);
   });
 
+  it('renders the mfx-checkbox and clicking it checks the underlying form control', () => {
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector('mfx-checkbox button');
+
+    button.click();
+    fixture.detectChanges();
+
+    expect(component.form.controls.registerPersonalMovement.value).toBe(true);
+    expect(button.getAttribute('aria-checked')).toBe('true');
+  });
+
   it('requires an account once "registrar como movimiento personal" is checked', () => {
     component.form.controls.registerPersonalMovement.setValue(true);
     fixture.detectChanges();
