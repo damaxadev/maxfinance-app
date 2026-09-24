@@ -151,6 +151,28 @@ export class MovementsService {
     );
   }
 
+  // Todos los gastos compartidos de estos grupos, sin filtrar por quién los
+  // registró — a diferencia de sharedMovementsForGroups$ (uid == quien
+  // registra), esto trae cualquier gasto del grupo, sin importar si el
+  // usuario actual lo registró, lo pagó, o solo le toca una parte. Usado por
+  // Inicio ("Gastos compartidos recientes"), que filtra client-side por
+  // participación (uid dentro de splits) — ver Home.
+  allSharedMovementsForGroups$(groupIds: string[]): Observable<SharedMovementWithId[]> {
+    return this.auth.currentUser$.pipe(
+      switchMap((user) => {
+        if (!user || groupIds.length === 0) {
+          return of([]);
+        }
+        const queries$ = groupIds.map((groupId) => this.groupMovements$(groupId));
+        return combineLatest(queries$).pipe(map((lists) => lists.flat()));
+      }),
+      catchError((error) => {
+        console.error('Error al cargar los gastos compartidos de los grupos', error);
+        return of([]);
+      })
+    );
+  }
+
   // Personales + compartidos que el usuario registró, ya mezclados — usado
   // por Presupuesto/Inicio para sumar gasto por categoría este mes (ver
   // core/budget-progress). No filtra por fecha (mismo criterio que

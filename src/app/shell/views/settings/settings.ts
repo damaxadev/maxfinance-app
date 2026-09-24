@@ -1,51 +1,185 @@
-import { Component, computed, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { Component, computed, effect, inject, signal } from '@angular/core';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { switchMap } from 'rxjs';
 
 import { Card } from '../../../shared/card/card';
-import { Checkbox } from '../../../shared/checkbox/checkbox';
+import { AnimatedNumber } from '../../../shared/animated-number/animated-number';
+import { MfxCurrencyInputDirective } from '../../../shared/currency/currency-input.directive';
+import { ProgressRing } from '../../../shared/progress-ring/progress-ring';
+import { Auth } from '../../../core/auth/auth';
+import {
+  calculateBudgetProgress,
+  sumExpensesByCategory,
+  type CategoryBudgetProgress,
+} from '../../../core/budget-progress/budget-progress';
+import { Budgets } from '../../../core/budgets/budgets';
 import { Categories, type CategoryWithId } from '../../../core/categories/categories';
 import { CategoryFormState } from '../../../core/category-form-state/category-form-state';
-import { Notifications } from '../../../core/notifications/notifications';
+import { GroupsService } from '../../../core/groups/groups';
+import { MovementsService } from '../../../core/movements/movements';
+
+function toMonthKey(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  return `${yyyy}-${mm}`;
+}
 
 @Component({
   selector: 'mfx-settings',
-  imports: [Card, RouterLink, Checkbox, ReactiveFormsModule],
+  imports: [Card, RouterLink, AnimatedNumber, ProgressRing, ReactiveFormsModule, MfxCurrencyInputDirective],
   templateUrl: './settings.html',
   styleUrl: './settings.scss',
 })
 export class Settings {
   private readonly categoriesService = inject(Categories);
   private readonly categoryFormState = inject(CategoryFormState);
-  private readonly notificationsService = inject(Notifications);
+  private readonly budgetsService = inject(Budgets);
+  private readonly movementsService = inject(MovementsService);
+  private readonly groupsService = inject(GroupsService);
+  private readonly auth = inject(Auth);
+  private readonly fb = inject(FormBuilder);
 
   private readonly categories = toSignal(this.categoriesService.categories$, { initialValue: [] });
   readonly customCategories = computed(() => this.categories().filter((c) => c.uid !== null));
+  readonly expenseCategories = computed(() => this.categories().filter((c) => c.type === 'expense'));
+  private readonly categoriesById = computed(() => new Map(this.categories().map((c) => [c.id, c])));
 
-  // No se pide el permiso al arrancar la app — solo al marcar este toggle.
-  // Una vez concedido queda deshabilitado (no hay forma de "revocar" un
-  // permiso del sistema desde dentro de la app; eso solo se hace desde
-  // Ajustes del sistema).
-  readonly notificationsControl = new FormControl(false, { nonNullable: true });
-  readonly notificationsMessage = signal<string | null>(null);
+  // --- Presupuestos (opt-in por categoría, ver DESIGN.md/BACKLOG 49b) ---
+  private readonly month = toMonthKey(new Date());
+  private readonly currentUid = computed(() => this.auth.currentUser?.uid ?? null);
+
+  private readonly groups = toSignal(this.groupsService.groups$, { initialValue: [] });
+  private readonly groupIds = computed(() => this.groups().map((g) => g.id));
+  private readonly movements = toSignal(
+    toObservable(this.groupIds).pipe(switchMap((groupIds) => this.movementsService.combinedMovements$(groupIds))),
+    { initialValue: [] }
+  );
+  private readonly budgets = toSignal(this.budgetsService.budgetsForMonth$(this.month), { initialValue: [] });
+
+  // Solo las categorías que YA tienen un budget este mes — opt-in, no las
+  // 10 de una vez con límite en $0 (lo que hacía la versión anterior).
+  readonly budgetedProgress = computed(() => {
+    const spentByCategory = sumExpensesByCategory(this.movements(), this.month, this.currentUid() ?? '');
+    return calculateBudgetProgress(this.budgets(), spentByCategory);
+  });
+
+  readonly unbudgetedExpenseCategories = computed(() => {
+    const budgetedIds = new Set(this.budgets().map((b) => b.categoryId));
+    return this.expenseCategories().filter((c) => !budgetedIds.has(c.id));
+  });
+
+  readonly addingBudget = signal(false);
+  readonly addBudgetForm = this.fb.nonNullable.group({
+    categoryId: ['', Validators.required],
+    limit: [0, [Validators.required, Validators.min(1)]],
+  });
+  readonly savingBudget = signal(false);
+  readonly budgetError = signal<string | null>(null);
+
+  // Edición inline del límite de una categoría ya presupuestada — solo una
+  // fila a la vez (mismo patrón ya usado en GroupActivity para "registrar
+  // como gasto/ingreso": abrir un formulario inline por fila, no un modal).
+  readonly editingCategoryId = signal<string | null>(null);
+  readonly editLimitControl = this.fb.nonNullable.control(0, [Validators.required, Validators.min(1)]);
 
   constructor() {
-    this.notificationsService
-      .checkStatus()
-      .then((status) => {
-        if (status === 'granted') {
-          this.notificationsControl.setValue(true, { emitEvent: false });
-          this.notificationsControl.disable({ emitEvent: false });
-        }
-      })
-      .catch((error) => console.error('Error al consultar el estado de notificaciones', error));
-
-    this.notificationsControl.valueChanges.subscribe((checked) => {
-      if (checked) {
-        void this.enableNotifications();
+    // Si la categoría seleccionada para agregar deja de estar disponible
+    // (por ejemplo, porque se agregó desde otra pestaña), no dejar un valor
+    // stale seleccionado.
+    effect(() => {
+      const ids = new Set(this.unbudgetedExpenseCategories().map((c) => c.id));
+      if (this.addBudgetForm.controls.categoryId.value && !ids.has(this.addBudgetForm.controls.categoryId.value)) {
+        this.addBudgetForm.controls.categoryId.setValue('');
       }
     });
+  }
+
+  categoryLabel(categoryId: string): string {
+    const category = this.categoriesById().get(categoryId);
+    return category ? `${category.icon} ${category.name}` : 'Categoría eliminada';
+  }
+
+  ringColor(progress: CategoryBudgetProgress): string {
+    if (progress.percentage > 100) return 'var(--danger)';
+    if (progress.percentage >= 80) return 'var(--accent)';
+    return 'var(--primary)';
+  }
+
+  ringPercentage(progress: CategoryBudgetProgress): number {
+    return Math.min(100, progress.percentage);
+  }
+
+  openAddBudget(): void {
+    this.addingBudget.set(true);
+    this.budgetError.set(null);
+    this.addBudgetForm.reset({ categoryId: '', limit: 0 });
+  }
+
+  cancelAddBudget(): void {
+    this.addingBudget.set(false);
+  }
+
+  async submitAddBudget(): Promise<void> {
+    if (this.addBudgetForm.invalid) {
+      this.addBudgetForm.markAllAsTouched();
+      return;
+    }
+
+    this.savingBudget.set(true);
+    this.budgetError.set(null);
+    const raw = this.addBudgetForm.getRawValue();
+
+    try {
+      await this.budgetsService.setLimit({ categoryId: raw.categoryId, month: this.month, limit: raw.limit });
+      this.addingBudget.set(false);
+    } catch (error) {
+      console.error('Error al agregar la categoría al presupuesto', error);
+      this.budgetError.set('No pudimos agregar la categoría. Intenta de nuevo.');
+    } finally {
+      this.savingBudget.set(false);
+    }
+  }
+
+  startEditLimit(progress: CategoryBudgetProgress): void {
+    this.editingCategoryId.set(progress.categoryId);
+    this.editLimitControl.setValue(progress.limit);
+    this.budgetError.set(null);
+  }
+
+  cancelEditLimit(): void {
+    this.editingCategoryId.set(null);
+  }
+
+  async saveEditLimit(categoryId: string): Promise<void> {
+    if (this.editLimitControl.invalid) {
+      this.editLimitControl.markAsTouched();
+      return;
+    }
+
+    this.savingBudget.set(true);
+    this.budgetError.set(null);
+
+    try {
+      await this.budgetsService.setLimit({ categoryId, month: this.month, limit: this.editLimitControl.getRawValue() });
+      this.editingCategoryId.set(null);
+    } catch (error) {
+      console.error('Error al actualizar el límite', error);
+      this.budgetError.set('No pudimos actualizar el límite. Intenta de nuevo.');
+    } finally {
+      this.savingBudget.set(false);
+    }
+  }
+
+  async removeBudget(categoryId: string): Promise<void> {
+    this.budgetError.set(null);
+    try {
+      await this.budgetsService.removeLimit(categoryId, this.month);
+    } catch (error) {
+      console.error('Error al quitar la categoría del presupuesto', error);
+      this.budgetError.set('No pudimos quitar la categoría. Intenta de nuevo.');
+    }
   }
 
   openCreateCategory(): void {
@@ -54,26 +188,5 @@ export class Settings {
 
   openEditCategory(category: CategoryWithId): void {
     this.categoryFormState.openEdit(category);
-  }
-
-  private async enableNotifications(): Promise<void> {
-    this.notificationsMessage.set(null);
-    try {
-      const result = await this.notificationsService.enable();
-      if (result === 'granted') {
-        this.notificationsControl.disable({ emitEvent: false });
-        return;
-      }
-      this.notificationsControl.setValue(false, { emitEvent: false });
-      this.notificationsMessage.set(
-        result === 'denied-permanently'
-          ? 'Debes habilitar las notificaciones manualmente desde los ajustes del sistema.'
-          : 'No concediste el permiso — puedes intentarlo de nuevo cuando quieras.'
-      );
-    } catch (error) {
-      console.error('Error al activar notificaciones', error);
-      this.notificationsControl.setValue(false, { emitEvent: false });
-      this.notificationsMessage.set('No pudimos activar las notificaciones. Intenta de nuevo.');
-    }
   }
 }

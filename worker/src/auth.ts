@@ -4,6 +4,7 @@ export interface Env {
   ANTHROPIC_API_KEY: string;
   INTERNAL_KEY: string;
   FIREBASE_PROJECT_ID: string;
+  AI_SUMMARY_CACHE: KVNamespace;
 }
 
 export type AuthResult =

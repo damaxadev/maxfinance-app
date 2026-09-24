@@ -66,6 +66,14 @@ export class Auth {
     return result.user;
   }
 
+  // Token de Firebase para autenticar llamadas al Worker de IA (ver
+  // AiSummary) — usa el SDK web (ya sincronizado en signInWithGoogle()),
+  // no el nativo, porque es el mismo que Firestore ya usa para sus reglas.
+  async getIdToken(): Promise<string | null> {
+    const user = this.firebaseJsAuth.currentUser;
+    return user ? user.getIdToken() : null;
+  }
+
   async signOut(): Promise<void> {
     await FirebaseAuthentication.signOut();
     await signOutFromFirebaseJsAuth(this.firebaseJsAuth);

@@ -1,4 +1,10 @@
-import { calculateBudgetProgress, calculateBudgetSummary, sumExpensesByCategory, type BudgetableMovement } from './budget-progress';
+import {
+  calculateBudgetProgress,
+  calculateBudgetSummary,
+  sumExpensesByCategory,
+  sumExpensesByMonth,
+  type BudgetableMovement,
+} from './budget-progress';
 import type { BudgetWithId } from '../budgets/budgets';
 
 // New Date('YYYY-MM-DD') (sin hora) se interpreta como medianoche UTC, no
@@ -80,6 +86,55 @@ describe('sumExpensesByCategory', () => {
     const result = sumExpensesByCategory(movements, '2026-03', 'u1');
 
     expect(result.get('cat-food')).toBe(0.3);
+  });
+});
+
+describe('sumExpensesByMonth', () => {
+  const referenceDate = new Date(2026, 2, 15); // 2026-03-15
+
+  it('returns one entry per month, ascending, zero-filled with no data', () => {
+    const result = sumExpensesByMonth([], 'u1', referenceDate, 3);
+
+    expect(result).toEqual([
+      { month: '2026-01', total: 0 },
+      { month: '2026-02', total: 0 },
+      { month: '2026-03', total: 0 },
+    ]);
+  });
+
+  it('sums expenses within each month, across categories', () => {
+    const movements = [
+      movement({ date: ts(2026, 1, 5), amount: 50 }),
+      movement({ date: ts(2026, 1, 20), categoryId: 'cat-transport', amount: 30 }),
+      movement({ date: ts(2026, 3, 1), amount: 100 }),
+    ];
+
+    const result = sumExpensesByMonth(movements, 'u1', referenceDate, 3);
+
+    expect(result).toEqual([
+      { month: '2026-01', total: 80 },
+      { month: '2026-02', total: 0 },
+      { month: '2026-03', total: 100 },
+    ]);
+  });
+
+  it('ignores income and shared expenses paid by someone else', () => {
+    const movements = [
+      movement({ date: ts(2026, 3, 1), type: 'income', amount: 1000 }),
+      movement({ date: ts(2026, 3, 2), amount: 100, paidBy: 'u2' }),
+    ];
+
+    const result = sumExpensesByMonth(movements, 'u1', referenceDate, 3);
+
+    expect(result[2].total).toBe(0);
+  });
+
+  it('ignores months outside the requested range', () => {
+    const movements = [movement({ date: ts(2025, 12, 31), amount: 999 })];
+
+    const result = sumExpensesByMonth(movements, 'u1', referenceDate, 3);
+
+    expect(result.reduce((sum, m) => sum + m.total, 0)).toBe(0);
   });
 });
 

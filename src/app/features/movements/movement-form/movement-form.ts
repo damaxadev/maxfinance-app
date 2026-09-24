@@ -7,6 +7,7 @@ import { Accounts } from '../../../core/accounts/accounts';
 import { Categories } from '../../../core/categories/categories';
 import { CategoryFormState } from '../../../core/category-form-state/category-form-state';
 import { MovementsService, type PersonalMovementWithId } from '../../../core/movements/movements';
+import { MfxCurrencyInputDirective } from '../../../shared/currency/currency-input.directive';
 import type { MovementType } from '../../../models/movement.model';
 
 function toDateInputValue(date: Date): string {
@@ -39,7 +40,7 @@ const NEW_CATEGORY_OPTION = '__new_category__';
 
 @Component({
   selector: 'mfx-movement-form',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, MfxCurrencyInputDirective],
   templateUrl: './movement-form.html',
   styleUrl: './movement-form.scss',
 })

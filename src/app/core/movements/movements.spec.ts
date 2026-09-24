@@ -271,6 +271,23 @@ describe('MovementsService', () => {
     expect(collectionData).not.toHaveBeenCalled();
   });
 
+  it('allSharedMovementsForGroups$(): runs one query per group (any registrar) and flattens the results', async () => {
+    const inGroup1 = { id: 'sm1', groupId: 'group1', uid: 'u2', paidBy: 'u2', amount: 30 };
+    const inGroup2 = { id: 'sm2', groupId: 'group2', uid: 'u3', paidBy: 'u3', amount: 40 };
+    vi.mocked(collectionData).mockReturnValueOnce(of([inGroup1])).mockReturnValueOnce(of([inGroup2]));
+
+    const result = await firstValueFrom(service.allSharedMovementsForGroups$(['group1', 'group2']));
+
+    expect(result).toEqual([inGroup1, inGroup2]);
+  });
+
+  it('allSharedMovementsForGroups$(): returns an empty array without querying when there are no groups', async () => {
+    const result = await firstValueFrom(service.allSharedMovementsForGroups$([]));
+
+    expect(result).toEqual([]);
+    expect(collectionData).not.toHaveBeenCalled();
+  });
+
   it('countGroupMovements(): reads the aggregation count for the group', async () => {
     vi.mocked(getCountFromServer).mockResolvedValueOnce({ data: () => ({ count: 7 }) } as never);
 

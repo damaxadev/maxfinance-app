@@ -1,11 +1,12 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { of, type Observable } from 'rxjs';
 import { vi } from 'vitest';
 
 import { Accounts } from '../../../core/accounts/accounts';
 import { Auth } from '../../../core/auth/auth';
 import { Categories } from '../../../core/categories/categories';
 import { GroupActivityFullState } from '../../../core/group-activity-full-state/group-activity-full-state';
+import { GroupsService } from '../../../core/groups/groups';
 import { MovementsService } from '../../../core/movements/movements';
 import { SettlementsService } from '../../../core/settlements/settlements';
 import { GroupActivity } from './group-activity';
@@ -16,6 +17,10 @@ const fakeMembers = [
 ];
 const fakeAccounts = [{ id: 'acc1', uid: 'u1', name: 'Efectivo', type: 'efectivo' as const, balance: 0, currency: 'COP' }];
 const fakeCategories = [{ id: 'cat1', uid: null, name: 'Comida', icon: '🍔', type: 'expense' as const }];
+const fakeGroups = [
+  { id: 'group1', name: 'Apartamento', members: ['u1', 'u2'], createdBy: 'u1', createdAt: {} as never },
+  { id: 'group2', name: 'Viaje', members: ['u1', 'u2'], createdBy: 'u1', createdAt: {} as never },
+];
 
 function ts(date: string) {
   return { toDate: () => new Date(date), toMillis: () => new Date(date).getTime() };
@@ -55,6 +60,43 @@ function settlement(overrides: Partial<Record<string, unknown>>) {
 const movements = [sharedMovement({ id: 'm1', date: ts('2026-02-10') })];
 const settlements = [settlement({ id: 's1', date: ts('2026-02-15') })];
 
+function configure(opts: {
+  groups?: unknown[];
+  movements?: () => Observable<unknown[]>;
+  settlements?: () => Observable<unknown[]>;
+  linkPersonalMovement?: ReturnType<typeof vi.fn>;
+  findLinkedMovementSettlementIds?: ReturnType<typeof vi.fn>;
+  countGroupMovements?: ReturnType<typeof vi.fn>;
+  countGroupSettlements?: ReturnType<typeof vi.fn>;
+  currentUid?: string;
+}) {
+  return TestBed.configureTestingModule({
+    imports: [GroupActivity],
+    providers: [
+      { provide: Auth, useValue: { currentUser: { uid: opts.currentUid ?? 'u1' } } },
+      { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
+      { provide: Categories, useValue: { categories$: of(fakeCategories) } },
+      { provide: GroupsService, useValue: { groups$: of(opts.groups ?? fakeGroups) } },
+      {
+        provide: MovementsService,
+        useValue: {
+          allSharedMovementsForGroups$: opts.movements ?? (() => of(movements)),
+          countGroupMovements: opts.countGroupMovements ?? vi.fn().mockResolvedValue(1),
+        },
+      },
+      {
+        provide: SettlementsService,
+        useValue: {
+          settlementsForGroups$: opts.settlements ?? (() => of(settlements)),
+          linkPersonalMovement: opts.linkPersonalMovement ?? vi.fn().mockResolvedValue(undefined),
+          findLinkedMovementSettlementIds: opts.findLinkedMovementSettlementIds ?? vi.fn().mockResolvedValue(new Set()),
+          countGroupSettlements: opts.countGroupSettlements ?? vi.fn().mockResolvedValue(1),
+        },
+      },
+    ],
+  }).compileComponents();
+}
+
 describe('GroupActivity', () => {
   let component: GroupActivity;
   let fixture: ComponentFixture<GroupActivity>;
@@ -69,23 +111,11 @@ describe('GroupActivity', () => {
     countGroupMovements = vi.fn().mockResolvedValue(1);
     countGroupSettlements = vi.fn().mockResolvedValue(1);
 
-    await TestBed.configureTestingModule({
-      imports: [GroupActivity],
-      providers: [
-        { provide: Auth, useValue: { currentUser: { uid: 'u1' } } },
-        { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
-        { provide: Categories, useValue: { categories$: of(fakeCategories) } },
-        { provide: MovementsService, useValue: { groupMovements$: () => of(movements), countGroupMovements } },
-        {
-          provide: SettlementsService,
-          useValue: { settlements$: () => of(settlements), linkPersonalMovement, findLinkedMovementSettlementIds, countGroupSettlements },
-        },
-      ],
-    }).compileComponents();
+    await configure({ linkPersonalMovement, findLinkedMovementSettlementIds, countGroupMovements, countGroupSettlements });
 
     fixture = TestBed.createComponent(GroupActivity);
     component = fixture.componentInstance;
-    fixture.componentRef.setInput('groupId', 'group1');
+    fixture.componentRef.setInput('groupIds', ['group1']);
     fixture.componentRef.setInput('members', fakeMembers);
     fixture.detectChanges();
     await Promise.resolve();
@@ -99,6 +129,11 @@ describe('GroupActivity', () => {
 
   it('combines movements and settlements sorted by date, newest first', () => {
     expect(component.entries().map((e) => e.id)).toEqual(['s1', 'm1']);
+  });
+
+  it('does not show the group tag for a single group', () => {
+    expect(component.showGroupTag()).toBe(false);
+    expect(fixture.nativeElement.querySelector('.mfx-group-activity__date').textContent).not.toContain('Apartamento');
   });
 
   it('resolves a category label with icon + name, falling back for a deleted category', () => {
@@ -152,11 +187,11 @@ describe('GroupActivity', () => {
     expect(component.linkingSettlementId()).toBeNull();
   });
 
-  it('loads the total count and exposes hasMore when there is more activity than the limit', async () => {
+  it('loads the total count (summed across groupIds) and exposes hasMore when there is more activity than the limit', async () => {
     countGroupMovements.mockResolvedValue(6);
     countGroupSettlements.mockResolvedValue(6);
     fixture = TestBed.createComponent(GroupActivity);
-    fixture.componentRef.setInput('groupId', 'group1');
+    fixture.componentRef.setInput('groupIds', ['group1']);
     fixture.componentRef.setInput('members', fakeMembers);
     fixture.detectChanges();
     await Promise.resolve();
@@ -166,7 +201,7 @@ describe('GroupActivity', () => {
     expect(fixture.componentInstance.hasMore()).toBe(true);
   });
 
-  it('openFullHistory() opens the GroupActivityFullState modal with the current group', () => {
+  it('openFullHistory() opens the GroupActivityFullState modal with the current (single) group', () => {
     const state = TestBed.inject(GroupActivityFullState);
     component.openFullHistory();
 
@@ -176,26 +211,9 @@ describe('GroupActivity', () => {
 
 describe('GroupActivity (viewed by the receiver, u2)', () => {
   it('shows "Registrar como ingreso" when the current user is the receiver (toUid)', async () => {
-    await TestBed.configureTestingModule({
-      imports: [GroupActivity],
-      providers: [
-        { provide: Auth, useValue: { currentUser: { uid: 'u2' } } },
-        { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
-        { provide: Categories, useValue: { categories$: of(fakeCategories) } },
-        { provide: MovementsService, useValue: { groupMovements$: () => of([]), countGroupMovements: vi.fn().mockResolvedValue(0) } },
-        {
-          provide: SettlementsService,
-          useValue: {
-            settlements$: () => of(settlements),
-            linkPersonalMovement: vi.fn(),
-            findLinkedMovementSettlementIds: vi.fn().mockResolvedValue(new Set()),
-            countGroupSettlements: vi.fn().mockResolvedValue(0),
-          },
-        },
-      ],
-    }).compileComponents();
+    await configure({ movements: () => of([]), currentUid: 'u2' });
     const fixture = TestBed.createComponent(GroupActivity);
-    fixture.componentRef.setInput('groupId', 'group1');
+    fixture.componentRef.setInput('groupIds', ['group1']);
     fixture.componentRef.setInput('members', fakeMembers);
     fixture.detectChanges();
 
@@ -210,27 +228,14 @@ describe('GroupActivity with limit=null (full history)', () => {
   beforeEach(async () => {
     countGroupMovements = vi.fn().mockResolvedValue(1);
 
-    await TestBed.configureTestingModule({
-      imports: [GroupActivity],
-      providers: [
-        { provide: Auth, useValue: { currentUser: { uid: 'u1' } } },
-        { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
-        { provide: Categories, useValue: { categories$: of(fakeCategories) } },
-        { provide: MovementsService, useValue: { groupMovements$: () => of([sharedMovement({ id: 'm1' })]), countGroupMovements } },
-        {
-          provide: SettlementsService,
-          useValue: {
-            settlements$: () => of([settlement({ id: 's1' })]),
-            linkPersonalMovement: vi.fn(),
-            findLinkedMovementSettlementIds: vi.fn().mockResolvedValue(new Set()),
-            countGroupSettlements: vi.fn().mockResolvedValue(1),
-          },
-        },
-      ],
-    }).compileComponents();
+    await configure({
+      movements: () => of([sharedMovement({ id: 'm1' })]),
+      settlements: () => of([settlement({ id: 's1' })]),
+      countGroupMovements,
+    });
 
     fixture = TestBed.createComponent(GroupActivity);
-    fixture.componentRef.setInput('groupId', 'group1');
+    fixture.componentRef.setInput('groupIds', ['group1']);
     fixture.componentRef.setInput('members', fakeMembers);
     fixture.componentRef.setInput('limit', null);
     fixture.detectChanges();
@@ -245,5 +250,58 @@ describe('GroupActivity with limit=null (full history)', () => {
 
   it('shows every entry with no slicing', () => {
     expect(fixture.componentInstance.entries().length).toBe(2);
+  });
+});
+
+describe('GroupActivity with multiple groupIds (e.g. Inicio, "Gastos compartidos recientes")', () => {
+  let component: GroupActivity;
+  let fixture: ComponentFixture<GroupActivity>;
+
+  beforeEach(async () => {
+    await configure({
+      movements: () => of([sharedMovement({ id: 'm-g1', groupId: 'group1', date: ts('2026-02-10') })]),
+      settlements: () => of([settlement({ id: 's-g2', groupId: 'group2', date: ts('2026-02-15') })]),
+    });
+
+    fixture = TestBed.createComponent(GroupActivity);
+    component = fixture.componentInstance;
+    fixture.componentRef.setInput('groupIds', ['group1', 'group2']);
+    fixture.componentRef.setInput('members', fakeMembers);
+    fixture.detectChanges();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+  });
+
+  it('combines entries from every group, sorted by date descending', () => {
+    expect(component.entries().map((e) => e.id)).toEqual(['s-g2', 'm-g1']);
+  });
+
+  it('shows the origin group name as a tag on each entry', () => {
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Apartamento');
+    expect(text).toContain('Viaje');
+  });
+
+  it('never shows "Ver todos" — GroupActivityFullState is single-group scoped', () => {
+    expect(component.hasMore()).toBe(false);
+  });
+
+  it('openFullHistory() is a no-op with more than one group', () => {
+    const state = TestBed.inject(GroupActivityFullState);
+    component.openFullHistory();
+
+    expect(state.groupId()).toBeNull();
+  });
+
+  it('shows a multi-group empty state when there is no activity at all', async () => {
+    TestBed.resetTestingModule();
+    await configure({ movements: () => of([]), settlements: () => of([]) });
+    const emptyFixture = TestBed.createComponent(GroupActivity);
+    emptyFixture.componentRef.setInput('groupIds', ['group1', 'group2']);
+    emptyFixture.componentRef.setInput('members', fakeMembers);
+    emptyFixture.detectChanges();
+
+    expect(emptyFixture.nativeElement.textContent).toContain('Todavía no tienes gastos compartidos recientes.');
   });
 });

@@ -3,7 +3,7 @@
     <swiper-slide><mfx-home /></swiper-slide>
     <swiper-slide><mfx-movements /></swiper-slide>
     <swiper-slide><mfx-groups /></swiper-slide>
-    <swiper-slide><mfx-budget /></swiper-slide>
+    <swiper-slide><mfx-recurring /></swiper-slide>
     <swiper-slide><mfx-settings /></swiper-slide>
   </swiper-container>
 
@@ -12,6 +12,7 @@
     (movementRequested)="movementFormState.openCreate()"
     (groupRequested)="groupFormState.openCreate()"
     (sharedExpenseRequested)="sharedExpenseFormState.openCreate()"
+    (recurringRequested)="recurringPaymentFormState.openCreate()"
   />
 </div>
 
@@ -85,5 +86,11 @@
       (saved)="recurringPaymentFormState.close()"
       (deleted)="recurringPaymentFormState.close()"
     />
+  </mfx-modal>
+}
+
+@if (balancesModalState.open()) {
+  <mfx-modal title="Balances" (closed)="balancesModalState.close()">
+    <mfx-balances-modal />
   </mfx-modal>
 }

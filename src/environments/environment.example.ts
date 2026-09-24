@@ -11,4 +11,7 @@ export const environment = {
     messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
     appId: 'YOUR_APP_ID',
   },
+  // URL del Worker de Cloudflare (maxfinance-worker), sin slash al final —
+  // ver worker/README y worker/wrangler.toml. Se obtiene con `wrangler deploy`.
+  workerUrl: 'https://YOUR_WORKER.YOUR_SUBDOMAIN.workers.dev',
 };

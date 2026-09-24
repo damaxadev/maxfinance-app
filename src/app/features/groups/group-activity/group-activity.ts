@@ -7,7 +7,7 @@ import { Accounts } from '../../../core/accounts/accounts';
 import { Auth } from '../../../core/auth/auth';
 import { Categories } from '../../../core/categories/categories';
 import { GroupActivityFullState } from '../../../core/group-activity-full-state/group-activity-full-state';
-import type { GroupMemberProfile } from '../../../core/groups/groups';
+import { GroupsService, type GroupMemberProfile } from '../../../core/groups/groups';
 import { MovementsService, type SharedMovementWithId } from '../../../core/movements/movements';
 import { SettlementsService, type SettlementWithId } from '../../../core/settlements/settlements';
 import { AnimatedNumber } from '../../../shared/animated-number/animated-number';
@@ -31,26 +31,35 @@ export class GroupActivity {
   private readonly settlementsService = inject(SettlementsService);
   private readonly accountsService = inject(Accounts);
   private readonly categoriesService = inject(Categories);
+  private readonly groupsService = inject(GroupsService);
   private readonly auth = inject(Auth);
   private readonly groupActivityFullState = inject(GroupActivityFullState);
 
-  readonly groupId = input.required<string>();
+  // Uno o varios grupos a la vez — GroupDetail pasa un solo id (sin
+  // etiqueta de grupo, ya se sabe cuál es); Inicio pasa todos los grupos
+  // del usuario para su feed combinado ("Gastos compartidos recientes"),
+  // que sí necesita la etiqueta para distinguir de dónde viene cada entrada.
+  readonly groupIds = input.required<string[]>();
   readonly members = input.required<GroupMemberProfile[]>();
   // null == sin límite (usado por la vista "ver todos"); un número muestra
   // solo los primeros N y activa el conteo total para el link "Ver todos".
   readonly limit = input<number | null>(RECENT_LIMIT);
 
+  readonly showGroupTag = computed(() => this.groupIds().length > 1);
+
   private readonly currentUid = computed(() => this.auth.currentUser?.uid ?? null);
   readonly accounts = toSignal(this.accountsService.accounts$, { initialValue: [] });
   private readonly categories = toSignal(this.categoriesService.categories$, { initialValue: [] });
   private readonly categoriesById = computed(() => new Map(this.categories().map((c) => [c.id, c])));
+  private readonly groups = toSignal(this.groupsService.groups$, { initialValue: [] });
+  private readonly groupsById = computed(() => new Map(this.groups().map((g) => [g.id, g])));
 
   private readonly movements = toSignal(
-    toObservable(this.groupId).pipe(switchMap((id) => this.movementsService.groupMovements$(id))),
+    toObservable(this.groupIds).pipe(switchMap((ids) => this.movementsService.allSharedMovementsForGroups$(ids))),
     { initialValue: [] as SharedMovementWithId[] }
   );
   private readonly settlements = toSignal(
-    toObservable(this.groupId).pipe(switchMap((id) => this.settlementsService.settlements$(id))),
+    toObservable(this.groupIds).pipe(switchMap((ids) => this.settlementsService.settlementsForGroups$(ids))),
     { initialValue: [] as SettlementWithId[] }
   );
 
@@ -67,7 +76,10 @@ export class GroupActivity {
   readonly hasMore = computed(() => {
     const max = this.limit();
     const total = this.totalCount();
-    return max !== null && total !== null && total > max;
+    // "Ver todos" abre el historial de UN grupo (GroupActivityFullState es
+    // groupId-scoped) — no tiene un destino sensible cuando esta lista
+    // combina varios grupos a la vez, así que se oculta en ese caso.
+    return max !== null && total !== null && total > max && this.groupIds().length === 1;
   });
 
   readonly linkedSettlementIds = signal<ReadonlySet<string>>(new Set());
@@ -78,14 +90,14 @@ export class GroupActivity {
 
   constructor() {
     // El conteo total no es reactivo (getCountFromServer no es un listener en
-    // vivo) — se recalcula solo cuando cambia el grupo, es suficiente para
+    // vivo) — se recalcula solo cuando cambian los grupos, es suficiente para
     // decidir si mostrar "Ver todos".
     effect(() => {
-      const groupId = this.groupId();
+      const groupIds = this.groupIds();
       if (this.limit() === null) {
         return;
       }
-      this.loadTotalCount(groupId);
+      this.loadTotalCount(groupIds);
     });
 
     effect(() => {
@@ -107,6 +119,10 @@ export class GroupActivity {
 
   memberProfile(uid: string): GroupMemberProfile {
     return this.members().find((member) => member.uid === uid) ?? { ...UNKNOWN_MEMBER, uid };
+  }
+
+  groupName(groupId: string): string {
+    return this.groupsById().get(groupId)?.name ?? 'Grupo';
   }
 
   categoryLabel(categoryId: string): string {
@@ -172,16 +188,22 @@ export class GroupActivity {
   }
 
   openFullHistory(): void {
-    this.groupActivityFullState.open(this.groupId());
+    const [onlyGroupId] = this.groupIds();
+    if (this.groupIds().length !== 1 || !onlyGroupId) {
+      return;
+    }
+    this.groupActivityFullState.open(onlyGroupId);
   }
 
-  private async loadTotalCount(groupId: string): Promise<void> {
+  private async loadTotalCount(groupIds: string[]): Promise<void> {
     try {
-      const [movementsCount, settlementsCount] = await Promise.all([
-        this.movementsService.countGroupMovements(groupId),
-        this.settlementsService.countGroupSettlements(groupId),
-      ]);
-      this.totalCount.set(movementsCount + settlementsCount);
+      const counts = await Promise.all(
+        groupIds.flatMap((groupId) => [
+          this.movementsService.countGroupMovements(groupId),
+          this.settlementsService.countGroupSettlements(groupId),
+        ])
+      );
+      this.totalCount.set(counts.reduce((sum, count) => sum + count, 0));
     } catch (error) {
       console.error('Error al contar la actividad del grupo', error);
     }

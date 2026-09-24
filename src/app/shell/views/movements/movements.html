@@ -15,7 +15,7 @@
       <mfx-card [index]="i" (click)="openEditAccount(account)">
         <div class="mfx-movements__account">
           <span>{{ accountTypeLabel(account.type) }} · {{ account.name }}</span>
-          <mfx-animated-number [value]="account.balance" prefix="$ " />
+          <mfx-animated-number [value]="account.balance" />
         </div>
       </mfx-card>
     }
@@ -60,17 +60,17 @@
             <div class="mfx-movements__item-text">
               <span class="mfx-movements__category-name">{{ categoryName(movement.categoryId) }}</span>
               @if (movement.groupName) {
-                <span class="mfx-movements__item-tag">Compartido · {{ movement.groupName }}</span>
+                <span class="mfx-movements__item-tag">Compartido · {{ movement.groupName }} · {{ formatDate(movement.date) }}</span>
               } @else {
-                <span class="mfx-movements__item-account">{{ accountName(movement.accountId ?? '') }}</span>
+                <span class="mfx-movements__item-account">{{ accountName(movement.accountId ?? '') }} · {{ formatDate(movement.date) }}</span>
               }
             </div>
           </div>
           <mfx-animated-number
             [class.mfx-movements__amount--income]="movement.type === 'income'"
             [class.mfx-movements__amount--expense]="movement.type === 'expense'"
-            [value]="movement.amount"
-            [prefix]="movement.type === 'income' ? '+ $ ' : '- $ '"
+            [value]="movement.type === 'income' ? movement.amount : -movement.amount"
+            [showSign]="true"
           />
         </div>
       </mfx-card>

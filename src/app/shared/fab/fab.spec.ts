@@ -102,7 +102,18 @@ describe('Fab', () => {
     expect(emitted.length).toBe(1);
   });
 
-  it('renders all three options while open', () => {
+  it('selecting "Nuevo recurrente" emits recurringRequested', () => {
+    component.toggle();
+    const emitted: void[] = [];
+    component.recurringRequested.subscribe(() => emitted.push(undefined));
+
+    component.selectOption(component.options[3]);
+
+    expect(component.open()).toBe(false);
+    expect(emitted.length).toBe(1);
+  });
+
+  it('renders all four options while open', () => {
     component.toggle();
     fixture.detectChanges();
 
@@ -110,7 +121,7 @@ describe('Fab', () => {
       fixture.nativeElement.querySelectorAll('.mfx-fab__option')
     ).map((el) => el.textContent?.trim());
 
-    expect(labels).toEqual(['Agregar movimiento', 'Nuevo grupo', 'Agregar gasto compartido']);
+    expect(labels).toEqual(['Agregar movimiento', 'Nuevo grupo', 'Agregar gasto compartido', 'Nuevo recurrente']);
   });
 
   it('closes when the backdrop is clicked', () => {

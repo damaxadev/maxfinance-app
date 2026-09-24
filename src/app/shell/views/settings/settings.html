@@ -7,15 +7,95 @@
   </mfx-card>
 
   <div class="mfx-section-header">
-    <h2>Notificaciones</h2>
+    <h2>Presupuestos</h2>
+    @if (!addingBudget() && unbudgetedExpenseCategories().length > 0) {
+      <button type="button" class="mfx-section-add" (click)="openAddBudget()">+ Agregar categoría</button>
+    }
   </div>
 
-  <mfx-card [index]="1">
-    <mfx-checkbox [formControl]="notificationsControl">Activar notificaciones de pagos recurrentes</mfx-checkbox>
-    @if (notificationsMessage()) {
-      <p class="mfx-form__success">{{ notificationsMessage() }}</p>
+  @if (budgetError()) {
+    <p class="mfx-form__error" role="alert">{{ budgetError() }}</p>
+  }
+
+  @if (addingBudget()) {
+    <mfx-card [index]="1">
+      <form class="mfx-form" [formGroup]="addBudgetForm" (ngSubmit)="submitAddBudget()">
+        <label class="mfx-form__field">
+          Categoría
+          <select formControlName="categoryId">
+            <option value="" disabled>Selecciona una categoría</option>
+            @for (category of unbudgetedExpenseCategories(); track category.id) {
+              <option [value]="category.id">{{ category.icon }} {{ category.name }}</option>
+            }
+          </select>
+          @if (addBudgetForm.controls.categoryId.invalid && addBudgetForm.controls.categoryId.touched) {
+            <span class="mfx-form__error" role="alert">Selecciona una categoría.</span>
+          }
+        </label>
+
+        <label class="mfx-form__field">
+          Límite mensual
+          <input mfxCurrencyInput formControlName="limit" />
+          @if (addBudgetForm.controls.limit.invalid && addBudgetForm.controls.limit.touched) {
+            <span class="mfx-form__error" role="alert">El límite debe ser mayor a 0.</span>
+          }
+        </label>
+
+        <div class="mfx-form__actions">
+          <button type="button" class="mfx-settings__cancel" [disabled]="savingBudget()" (click)="cancelAddBudget()">
+            Cancelar
+          </button>
+          <button type="submit" class="mfx-btn-primary" [disabled]="savingBudget() || addBudgetForm.invalid">
+            {{ savingBudget() ? 'Guardando…' : 'Agregar' }}
+          </button>
+        </div>
+      </form>
+    </mfx-card>
+  }
+
+  @if (budgetedProgress().length === 0) {
+    <mfx-card [index]="2">
+      <p>Todavía no presupuestas ninguna categoría. Agrega la primera con "+ Agregar categoría".</p>
+    </mfx-card>
+  } @else {
+    @for (progress of budgetedProgress(); track progress.categoryId; let i = $index) {
+      <mfx-card [index]="i + 2">
+        <div class="mfx-settings__budget-row">
+          <mfx-progress-ring
+            [percentage]="ringPercentage(progress)"
+            [size]="44"
+            [strokeWidth]="6"
+            [color]="ringColor(progress)"
+          />
+          <div class="mfx-settings__budget-info">
+            <span>{{ categoryLabel(progress.categoryId) }}</span>
+            @if (editingCategoryId() === progress.categoryId) {
+              <div class="mfx-settings__budget-edit">
+                <input mfxCurrencyInput [formControl]="editLimitControl" />
+                <button type="button" class="mfx-btn-primary" [disabled]="savingBudget()" (click)="saveEditLimit(progress.categoryId)">
+                  Guardar
+                </button>
+                <button type="button" class="mfx-settings__cancel" [disabled]="savingBudget()" (click)="cancelEditLimit()">
+                  Cancelar
+                </button>
+              </div>
+            } @else {
+              <span class="mfx-settings__budget-amounts">
+                <mfx-animated-number [value]="progress.spent" /> de
+                <mfx-animated-number [value]="progress.limit" />
+              </span>
+            }
+          </div>
+          @if (editingCategoryId() !== progress.categoryId) {
+            <div class="mfx-settings__budget-actions">
+              <button type="button" class="mfx-settings__budget-edit-btn" (click)="startEditLimit(progress)">Editar</button>
+              <button type="button" class="mfx-btn-danger" (click)="removeBudget(progress.categoryId)">Quitar</button>
+            </div>
+          }
+        </div>
+      </mfx-card>
     }
-  </mfx-card>
+  }
 
   <div class="mfx-section-header">
     <h2>Categorías personalizadas</h2>
@@ -23,12 +103,12 @@
   </div>
 
   @if (customCategories().length === 0) {
-    <mfx-card [index]="2">
+    <mfx-card [index]="0">
       <p>No tienes categorías personalizadas todavía. Las categorías base ya están disponibles al agregar un movimiento.</p>
     </mfx-card>
   } @else {
     @for (category of customCategories(); track category.id; let i = $index) {
-      <mfx-card [index]="i + 2" (click)="openEditCategory(category)">
+      <mfx-card [index]="i" (click)="openEditCategory(category)">
         <span>{{ category.icon }} {{ category.name }} · {{ category.type === 'income' ? 'Ingreso' : 'Gasto' }}</span>
       </mfx-card>
     }

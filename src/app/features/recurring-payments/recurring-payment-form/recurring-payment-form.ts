@@ -11,6 +11,7 @@ import {
   type RecurringPaymentFormValue,
 } from '../../../core/recurring-payments/recurring-payments';
 import { Checkbox } from '../../../shared/checkbox/checkbox';
+import { MfxCurrencyInputDirective } from '../../../shared/currency/currency-input.directive';
 
 function toDateInputValue(date: Date): string {
   const yyyy = date.getFullYear();
@@ -28,7 +29,7 @@ const FREQUENCIES: { value: Frequency; label: string }[] = [
 
 @Component({
   selector: 'mfx-recurring-payment-form',
-  imports: [ReactiveFormsModule, Checkbox],
+  imports: [ReactiveFormsModule, Checkbox, MfxCurrencyInputDirective],
   templateUrl: './recurring-payment-form.html',
   styleUrl: './recurring-payment-form.scss',
 })

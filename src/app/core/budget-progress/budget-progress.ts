@@ -63,6 +63,42 @@ export function sumExpensesByCategory(
   return sums;
 }
 
+export interface MonthlyExpenseTotal {
+  month: string;
+  total: number;
+}
+
+// Últimos `monthsBack` meses (incluyendo el mes de referenceDate), en orden
+// ascendente y con 0 relleno para los meses sin gasto — así la gráfica de
+// tendencia de Inicio siempre muestra el mismo número de puntos. Mismo
+// criterio de filtrado que sumExpensesByCategory (solo gastos, solo los que
+// el usuario efectivamente pagó), pero sin acotar a un solo mes.
+export function sumExpensesByMonth(
+  movements: BudgetableMovement[],
+  currentUid: string,
+  referenceDate: Date,
+  monthsBack: number
+): MonthlyExpenseTotal[] {
+  const sums = new Map<string, number>();
+  for (const movement of movements) {
+    if (movement.type !== 'expense') {
+      continue;
+    }
+    if (movement.paidBy !== undefined && movement.paidBy !== currentUid) {
+      continue;
+    }
+    const month = toMonthKey(movement.date.toDate());
+    sums.set(month, round2((sums.get(month) ?? 0) + movement.amount));
+  }
+
+  const result: MonthlyExpenseTotal[] = [];
+  for (let i = monthsBack - 1; i >= 0; i--) {
+    const month = toMonthKey(new Date(referenceDate.getFullYear(), referenceDate.getMonth() - i, 1));
+    result.push({ month, total: sums.get(month) ?? 0 });
+  }
+  return result;
+}
+
 export function calculateBudgetProgress(
   budgets: BudgetWithId[],
   spentByCategory: Map<string, number>

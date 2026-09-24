@@ -93,6 +93,23 @@ describe('SettlementsService (current user is the payer, u1)', () => {
     expect(result).toEqual([fakeSettlement]);
   });
 
+  it('settlementsForGroups$(): runs one query per group and flattens the results', async () => {
+    const inGroup1 = { id: 's1', groupId: 'group1', fromUid: 'u1', toUid: 'u2', amount: 50 };
+    const inGroup2 = { id: 's2', groupId: 'group2', fromUid: 'u2', toUid: 'u1', amount: 30 };
+    vi.mocked(collectionData).mockReturnValueOnce(of([inGroup1])).mockReturnValueOnce(of([inGroup2]));
+
+    const result = await firstValueFrom(service.settlementsForGroups$(['group1', 'group2']));
+
+    expect(result).toEqual([inGroup1, inGroup2]);
+  });
+
+  it('settlementsForGroups$(): returns an empty array without querying when there are no groups', async () => {
+    const result = await firstValueFrom(service.settlementsForGroups$([]));
+
+    expect(result).toEqual([]);
+    expect(collectionData).not.toHaveBeenCalled();
+  });
+
   it('create(): registers the settlement without a linked movement by default', async () => {
     await service.create({
       groupId: 'group1',

@@ -1,5 +1,7 @@
 @if (entries().length === 0) {
-  <p class="mfx-group-activity__empty">Todavía no hay actividad en este grupo.</p>
+  <p class="mfx-group-activity__empty">
+    {{ showGroupTag() ? 'Todavía no tienes gastos compartidos recientes.' : 'Todavía no hay actividad en este grupo.' }}
+  </p>
 } @else {
   @for (entry of entries(); track entry.id) {
     <div class="mfx-group-activity__row">
@@ -14,9 +16,14 @@
             <strong>{{ memberProfile(entry.movement.paidBy).displayName || 'Alguien' }}</strong>
             pagó {{ categoryLabel(entry.movement.categoryId) }}
           </span>
-          <span class="mfx-group-activity__date">{{ formatDate(entry.movement.date) }}</span>
+          <span class="mfx-group-activity__date">
+            {{ formatDate(entry.movement.date) }}
+            @if (showGroupTag()) {
+              · {{ groupName(entry.movement.groupId) }}
+            }
+          </span>
         </div>
-        <mfx-animated-number class="mfx-group-activity__amount" [value]="entry.movement.amount" [decimals]="2" prefix="$ " />
+        <mfx-animated-number class="mfx-group-activity__amount" [value]="entry.movement.amount" />
       } @else {
         <div class="mfx-group-activity__people">
           <mfx-avatar
@@ -36,7 +43,12 @@
             le pagó a
             <strong>{{ memberProfile(entry.settlement.toUid).displayName || 'alguien' }}</strong>
           </span>
-          <span class="mfx-group-activity__date">{{ formatDate(entry.settlement.date) }}</span>
+          <span class="mfx-group-activity__date">
+            {{ formatDate(entry.settlement.date) }}
+            @if (showGroupTag()) {
+              · {{ groupName(entry.settlement.groupId) }}
+            }
+          </span>
 
           @if (linkingSettlementId() === entry.settlement.id) {
             <div class="mfx-group-activity__link-form">
@@ -69,7 +81,7 @@
             </button>
           }
         </div>
-        <mfx-animated-number class="mfx-group-activity__amount" [value]="entry.settlement.amount" [decimals]="2" prefix="$ " />
+        <mfx-animated-number class="mfx-group-activity__amount" [value]="entry.settlement.amount" />
       }
     </div>
   }
