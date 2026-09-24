@@ -232,6 +232,7 @@ async function notifyRecurringPaymentProcessed(
 ): Promise<void> {
   const userSnap = await firestore.collection('users').doc(uid).get();
   const tokens = (userSnap.data()?.['fcmTokens'] as string[] | undefined) ?? [];
+  console.log(`[processRecurringPayments] ${uid}: ${tokens.length} token(s) registrados`);
   if (tokens.length === 0) {
     return;
   }
@@ -241,19 +242,29 @@ async function notifyRecurringPaymentProcessed(
 
   await Promise.all(
     tokens.map(async (token) => {
+      const shortToken = `${token.slice(0, 12)}…`;
       try {
-        await messaging.send({
+        const messageId = await messaging.send({
           token,
           notification: {
             title: 'Pago recurrente procesado',
             body: `${paymentName}: $${amount.toLocaleString('es-CO')}`,
           },
+          // 'recurring-payments' tiene que coincidir con
+          // RECURRING_PAYMENTS_CHANNEL_ID en src/app/core/notifications/
+          // notifications.ts — dos proyectos TS separados, sin un import
+          // compartido posible, así que si se renombra allá hay que
+          // renombrarlo acá también. Sin esto, Android puede enrutar la
+          // notificación a un canal genérico en vez del que se creó.
+          android: { notification: { channelId: 'recurring-payments' } },
         });
+        console.log(`[processRecurringPayments] enviado a ${shortToken} — messageId=${messageId}`);
       } catch (error) {
         if ((error as { code?: string }).code === 'messaging/registration-token-not-registered') {
+          console.log(`[processRecurringPayments] token ${shortToken} ya no existe, se elimina de ${uid}`);
           deadTokens.push(token);
         } else {
-          console.error(`Error enviando notificación push a ${uid}`, error);
+          console.error(`[processRecurringPayments] error enviando a ${shortToken} (uid ${uid})`, error);
         }
       }
     })
@@ -286,12 +297,17 @@ export const processRecurringPayments = onSchedule(
       .where('nextDate', '<=', now)
       .get();
 
+    console.log(`[processRecurringPayments] ${dueSnap.size} recurrente(s) vencido(s) encontrado(s)`);
+
     for (const paymentDoc of dueSnap.docs) {
       const payment = paymentDoc.data();
       const uid = payment['uid'] as string | null;
       if (!uid) {
+        console.log(`[processRecurringPayments] ${paymentDoc.id} es de grupo (uid null) — se ignora por ahora`);
         continue;
       }
+
+      console.log(`[processRecurringPayments] procesando ${paymentDoc.id} ("${payment['name']}") de ${uid}`);
 
       const amount = payment['amount'] as number;
       const accountId = payment['accountId'] as string;
@@ -319,9 +335,13 @@ export const processRecurringPayments = onSchedule(
           tx.update(paymentDoc.ref, { nextDate: Timestamp.fromDate(newNextDate) });
         });
       } catch (error) {
-        console.error(`Error procesando el recurrente ${paymentDoc.id}`, error);
+        console.error(`[processRecurringPayments] error procesando ${paymentDoc.id}`, error);
         continue;
       }
+
+      console.log(
+        `[processRecurringPayments] ${paymentDoc.id}: movement ${movementRef.id} creado, nextDate avanzada a ${newNextDate.toISOString()}`
+      );
 
       await notifyRecurringPaymentProcessed(firestore, uid, payment['name'] as string, amount);
     }
