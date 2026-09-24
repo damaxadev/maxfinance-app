@@ -74,3 +74,16 @@
     <mfx-settlement-form [context]="context" (saved)="settlementFormState.close()" />
   </mfx-modal>
 }
+
+@if (recurringPaymentFormState.request(); as request) {
+  <mfx-modal
+    [title]="request.mode === 'edit' ? 'Editar pago recurrente' : 'Nuevo pago recurrente'"
+    (closed)="recurringPaymentFormState.close()"
+  >
+    <mfx-recurring-payment-form
+      [initialValue]="request.mode === 'edit' ? request.payment : null"
+      (saved)="recurringPaymentFormState.close()"
+      (deleted)="recurringPaymentFormState.close()"
+    />
+  </mfx-modal>
+}

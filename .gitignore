@@ -59,3 +59,7 @@ android/app/google-services.json
 # Cloudflare Worker — ver worker/.dev.vars.example como plantilla
 # (worker/.gitignore ya cubre esto también, con un patrón más amplio)
 /worker/.dev.vars
+
+# Firebase CLI — log de depuración que deja `firebase deploy`/`firebase emulators`
+firebase-debug.log
+firebase-debug.*.log

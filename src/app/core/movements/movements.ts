@@ -151,6 +151,16 @@ export class MovementsService {
     );
   }
 
+  // Personales + compartidos que el usuario registró, ya mezclados — usado
+  // por Presupuesto/Inicio para sumar gasto por categoría este mes (ver
+  // core/budget-progress). No filtra por fecha (mismo criterio que
+  // personalMovements$: se trae todo, se filtra por rango en el cliente).
+  combinedMovements$(groupIds: string[]): Observable<(PersonalMovementWithId | SharedMovementWithId)[]> {
+    return combineLatest([this.personalMovements$, this.sharedMovementsForGroups$(groupIds)]).pipe(
+      map(([personal, shared]) => [...personal, ...shared])
+    );
+  }
+
   // Conteo total (no reactivo, no trae los documentos) — usado por el
   // historial de actividad del grupo para saber si hay más de los ~10 que
   // ya muestra sin tener que descargarlos todos.
