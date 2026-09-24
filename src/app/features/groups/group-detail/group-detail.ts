@@ -6,12 +6,14 @@ import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { Auth } from '../../../core/auth/auth';
 import { GroupsService, type GroupMemberProfile } from '../../../core/groups/groups';
 import { Avatar } from '../../../shared/avatar/avatar';
+import { GroupActivity } from '../group-activity/group-activity';
+import { GroupBalance } from '../group-balance/group-balance';
 
 const JUST_INVITED_DURATION_MS = 2000;
 
 @Component({
   selector: 'mfx-group-detail',
-  imports: [ReactiveFormsModule, Avatar],
+  imports: [ReactiveFormsModule, Avatar, GroupBalance, GroupActivity],
   templateUrl: './group-detail.html',
   styleUrl: './group-detail.scss',
 })
@@ -71,6 +73,11 @@ export class GroupDetail {
   readonly inviting = signal(false);
   readonly inviteError = signal<string | null>(null);
   readonly inviteSuccess = signal(false);
+
+  // La sección "Invitar" arranca colapsada — ver BACKLOG 44e. inviteSuccess
+  // se muestra fuera del bloque colapsable para que siga siendo visible
+  // aunque el éxito la vuelva a colapsar.
+  readonly inviteSectionExpanded = signal(false);
 
   constructor() {
     effect(() => {
@@ -195,7 +202,7 @@ export class GroupDetail {
     try {
       await this.groupsService.inviteByEmail(group.id, this.inviteForm.getRawValue().email);
       this.inviteForm.reset({ email: '' });
-      this.inviteSuccess.set(true);
+      this.markInviteSuccess();
     } catch (error) {
       console.error('Error al invitar', error);
       this.inviteError.set(error instanceof Error ? error.message : 'No pudimos invitar a esta persona.');
@@ -225,6 +232,10 @@ export class GroupDetail {
     }
   }
 
+  toggleInviteSection(): void {
+    this.inviteSectionExpanded.update((expanded) => !expanded);
+  }
+
   private markJustInvited(uid: string): void {
     this.justInvitedUids.set(new Set([...this.justInvitedUids(), uid]));
     setTimeout(() => {
@@ -232,6 +243,12 @@ export class GroupDetail {
       next.delete(uid);
       this.justInvitedUids.set(next);
     }, JUST_INVITED_DURATION_MS);
+  }
+
+  private markInviteSuccess(): void {
+    this.inviteSectionExpanded.set(false);
+    this.inviteSuccess.set(true);
+    setTimeout(() => this.inviteSuccess.set(false), JUST_INVITED_DURATION_MS);
   }
 
   private notSelfEmailValidator() {

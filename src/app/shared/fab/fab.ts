@@ -14,7 +14,6 @@ const FAB_OPTIONS: readonly FabOption[] = [
 ];
 
 const STAGGER_STEP_MS = 50;
-const MESSAGE_DURATION_MS = 2000;
 
 @Component({
   selector: 'mfx-fab',
@@ -43,11 +42,9 @@ const MESSAGE_DURATION_MS = 2000;
 export class Fab {
   readonly options = FAB_OPTIONS;
   readonly open = signal(false);
-  readonly message = signal<string | null>(null);
   readonly movementRequested = output<void>();
   readonly groupRequested = output<void>();
-
-  private messageTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  readonly sharedExpenseRequested = output<void>();
 
   staggerDelay(index: number): number {
     return index * STAGGER_STEP_MS;
@@ -87,16 +84,7 @@ export class Fab {
       return;
     }
 
-    console.log(`[mfx-fab] "${option.label}" tocada (placeholder, sin acción real todavía)`);
-    this.showMessage(`Próximamente: ${option.label}`);
-  }
-
-  private showMessage(text: string): void {
-    this.message.set(text);
-    if (this.messageTimeoutId !== null) {
-      clearTimeout(this.messageTimeoutId);
-    }
-    this.messageTimeoutId = setTimeout(() => this.message.set(null), MESSAGE_DURATION_MS);
+    this.sharedExpenseRequested.emit();
   }
 
   private async buzz(style: ImpactStyle): Promise<void> {

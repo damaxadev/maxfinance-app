@@ -65,6 +65,19 @@ service cloud.firestore {
 
     // movements — si groupId es null, solo el dueño; si tiene groupId,
     // cualquier miembro del grupo puede leer, pero solo escribe quien creó el registro.
+    // Verificado con el flujo real de Fase 5 (gasto compartido + query por
+    // groupId constante para el cálculo de balance): no hizo falta tocar
+    // nada, groupId sigue siendo un filtro de igualdad conocido, así que
+    // Firestore puede probar isGroupMember(groupId) estáticamente para
+    // toda la lista (mismo mecanismo ya usado por groupMovements$/remove()).
+    //
+    // Verificado también con las consultas de 44b-44e (vista de Movimientos
+    // combinada, historial de actividad, "ver todos" y el check de
+    // movimiento ya vinculado): todas siguen filtrando por igualdades
+    // constantes (uid, groupId, settlementId — incluido el 'in' de
+    // settlementId) sin ningún orderBy sobre un campo distinto al filtrado,
+    // así que ninguna necesita un índice compuesto nuevo — quedan cubiertas
+    // por los índices de campo único que Firestore crea automáticamente.
     match /movements/{movementId} {
       allow read: if resource.data.groupId == null
         ? isOwner(resource.data.uid)
@@ -78,6 +91,12 @@ service cloud.firestore {
 
     // settlements — solo miembros del grupo correspondiente; create además
     // exige ser una de las dos partes de la deuda (no cualquier miembro).
+    // Verificado con el flujo real de Fase 5 (SettlementsService.create()):
+    // el cliente siempre asigna fromUid/toUid a partir de un edge de deuda
+    // donde el usuario actual ya es una de las dos partes, así que nunca
+    // choca con este create. Tampoco hizo falta una Cloud Function — el
+    // batch de settlement + movement personal opcional se hace directo,
+    // porque ambos son creates (nunca updates) desde cero.
     match /settlements/{settlementId} {
       allow read: if isGroupMember(resource.data.groupId);
 

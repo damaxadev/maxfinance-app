@@ -10,6 +10,7 @@ import { Auth } from '../core/auth/auth';
 import { Accounts } from '../core/accounts/accounts';
 import { Categories } from '../core/categories/categories';
 import { MovementsService } from '../core/movements/movements';
+import { SettlementsService } from '../core/settlements/settlements';
 import { GroupsService } from '../core/groups/groups';
 import { Fab } from '../shared/fab/fab';
 import { MovementForm } from '../features/movements/movement-form/movement-form';
@@ -53,7 +54,23 @@ describe('Shell', () => {
         provideRouter([]),
         { provide: Accounts, useValue: { accounts$: of([]) } },
         { provide: Categories, useValue: { categories$: of([]) } },
-        { provide: MovementsService, useValue: { personalMovements$: of([]) } },
+        {
+          provide: MovementsService,
+          useValue: {
+            personalMovements$: of([]),
+            groupMovements$: () => of([]),
+            sharedMovementsForGroups$: () => of([]),
+            countGroupMovements: vi.fn().mockResolvedValue(0),
+          },
+        },
+        {
+          provide: SettlementsService,
+          useValue: {
+            settlements$: () => of([]),
+            findLinkedMovementSettlementIds: vi.fn().mockResolvedValue(new Set()),
+            countGroupSettlements: vi.fn().mockResolvedValue(0),
+          },
+        },
         {
           provide: GroupsService,
           useValue: {
@@ -211,5 +228,22 @@ describe('Shell', () => {
     fixture.detectChanges();
 
     expect(component.groupDetailState.groupId()).toBeNull();
+  });
+
+  it('renders the "ver toda la actividad" modal once a group id is open', () => {
+    component.groupActivityFullState.open('group1');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('mfx-group-activity-full')).toBeTruthy();
+  });
+
+  it('closes the group activity full modal via the shared state', () => {
+    component.groupActivityFullState.open('group1');
+    fixture.detectChanges();
+
+    component.groupActivityFullState.close();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('mfx-group-activity-full')).toBeNull();
   });
 });

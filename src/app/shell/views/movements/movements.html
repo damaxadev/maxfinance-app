@@ -57,7 +57,11 @@
         <div class="mfx-movements__item">
           <div class="mfx-movements__item-info">
             <span>{{ categoryIcon(movement.categoryId) }} {{ categoryName(movement.categoryId) }}</span>
-            <span class="mfx-movements__item-account">{{ accountName(movement.accountId) }}</span>
+            @if (movement.groupName) {
+              <span class="mfx-movements__item-tag">Compartido · {{ movement.groupName }}</span>
+            } @else {
+              <span class="mfx-movements__item-account">{{ accountName(movement.accountId ?? '') }}</span>
+            }
           </div>
           <mfx-animated-number
             [class.mfx-movements__amount--income]="movement.type === 'income'"

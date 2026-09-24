@@ -9,4 +9,7 @@ export interface Settlement {
   amount: number;
   date: Timestamp;
   note: string;
+  // Presente solo si, al registrar el settlement, también se creó un
+  // movement personal equivalente (checkbox opcional en el formulario).
+  linkedMovementId: string | null;
 }

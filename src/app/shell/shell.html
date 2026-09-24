@@ -8,7 +8,11 @@
   </swiper-container>
 
   <mfx-tab-bar [activeIndex]="activeIndex()" (tabSelected)="onTabSelected($event)" />
-  <mfx-fab (movementRequested)="movementFormState.openCreate()" (groupRequested)="groupFormState.openCreate()" />
+  <mfx-fab
+    (movementRequested)="movementFormState.openCreate()"
+    (groupRequested)="groupFormState.openCreate()"
+    (sharedExpenseRequested)="sharedExpenseFormState.openCreate()"
+  />
 </div>
 
 @if (movementFormState.request(); as request) {
@@ -50,5 +54,23 @@
 @if (groupDetailState.groupId(); as groupId) {
   <mfx-modal title="Grupo" (closed)="groupDetailState.close()">
     <mfx-group-detail [groupId]="groupId" (left)="groupDetailState.close()" />
+  </mfx-modal>
+}
+
+@if (groupActivityFullState.groupId(); as groupId) {
+  <mfx-modal title="Actividad del grupo" (closed)="groupActivityFullState.close()">
+    <mfx-group-activity-full [groupId]="groupId" />
+  </mfx-modal>
+}
+
+@if (sharedExpenseFormState.open()) {
+  <mfx-modal title="Gasto compartido" (closed)="sharedExpenseFormState.close()">
+    <mfx-shared-expense-form (saved)="sharedExpenseFormState.close()" />
+  </mfx-modal>
+}
+
+@if (settlementFormState.context(); as context) {
+  <mfx-modal title="Marcar como saldada" (closed)="settlementFormState.close()">
+    <mfx-settlement-form [context]="context" (saved)="settlementFormState.close()" />
   </mfx-modal>
 }

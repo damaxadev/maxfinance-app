@@ -30,6 +30,9 @@ const BASE_CATEGORIES = [
   { name: 'Ropa', icon: '👕', type: 'expense' },
   { name: 'Salario', icon: '💼', type: 'income' },
   { name: 'Otros ingresos', icon: '💰', type: 'income' },
+  // Fase 5: usada al convertir un settlement en movimiento personal cuando
+  // quien lo registra es fromUid (el que pagó) — ver DATABASE.md.
+  { name: 'Pago de deuda', icon: '💳', type: 'expense' },
 ];
 
 async function main() {

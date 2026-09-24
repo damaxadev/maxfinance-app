@@ -2,9 +2,33 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
 
+import { Accounts } from '../../../core/accounts/accounts';
 import { Auth } from '../../../core/auth/auth';
+import { Categories } from '../../../core/categories/categories';
 import { GroupsService } from '../../../core/groups/groups';
+import { MovementsService } from '../../../core/movements/movements';
+import { SettlementsService } from '../../../core/settlements/settlements';
 import { GroupDetail } from './group-detail';
+
+// GroupBalance y GroupActivity (renderizados dentro de GroupDetail) inyectan
+// estos servicios — se stubean vacíos en las cuatro suites de este archivo,
+// ya que ambos se prueban por separado en sus propios specs.
+const groupChildStubs = [
+  {
+    provide: MovementsService,
+    useValue: { groupMovements$: () => of([]), countGroupMovements: vi.fn().mockResolvedValue(0) },
+  },
+  {
+    provide: SettlementsService,
+    useValue: {
+      settlements$: () => of([]),
+      findLinkedMovementSettlementIds: vi.fn().mockResolvedValue(new Set()),
+      countGroupSettlements: vi.fn().mockResolvedValue(0),
+    },
+  },
+  { provide: Accounts, useValue: { accounts$: of([]) } },
+  { provide: Categories, useValue: { categories$: of([]) } },
+];
 
 const { mockImpact, mockNotification } = vi.hoisted(() => ({
   mockImpact: vi.fn().mockResolvedValue(undefined),
@@ -78,6 +102,7 @@ describe('GroupDetail (viewed by the creator)', () => {
             getKnownContacts,
           },
         },
+        ...groupChildStubs,
       ],
     }).compileComponents();
 
@@ -99,6 +124,10 @@ describe('GroupDetail (viewed by the creator)', () => {
 
   it('is the creator, so it can manage the group', () => {
     expect(component.canManageGroup()).toBe(true);
+  });
+
+  it('renders the "Actividad reciente" section', () => {
+    expect(fixture.nativeElement.querySelector('mfx-group-activity')).toBeTruthy();
   });
 
   it('loads member profiles for the group', () => {
@@ -206,6 +235,8 @@ describe('GroupDetail (viewed by the creator)', () => {
   });
 
   it('renders a chip only for the suggested (non-member) contact', () => {
+    component.inviteSectionExpanded.set(true);
+    fixture.detectChanges();
     const chips = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('.mfx-group-detail__chip'));
 
     expect(chips.length).toBe(1);
@@ -221,6 +252,7 @@ describe('GroupDetail (viewed by the creator)', () => {
   });
 
   it('shows "Invitado ✓" in the chip right after a successful invite', async () => {
+    component.inviteSectionExpanded.set(true);
     await component.inviteContact(fakeContacts[1]);
     fixture.detectChanges();
 
@@ -264,6 +296,7 @@ describe('GroupDetail (viewed by the creator)', () => {
   });
 
   it('shows the specific inline error message for the self-invite case', () => {
+    component.inviteSectionExpanded.set(true);
     component.inviteForm.controls.email.setValue('diego@example.com');
     component.inviteForm.controls.email.markAsTouched();
     fixture.detectChanges();
@@ -274,6 +307,7 @@ describe('GroupDetail (viewed by the creator)', () => {
   });
 
   it('shows the specific inline error message for the already-a-member case', () => {
+    component.inviteSectionExpanded.set(true);
     component.inviteForm.controls.email.setValue('ana@example.com');
     component.inviteForm.controls.email.markAsTouched();
     fixture.detectChanges();
@@ -284,6 +318,7 @@ describe('GroupDetail (viewed by the creator)', () => {
   });
 
   it('disables the "Invitar" button while the email field is invalid', () => {
+    component.inviteSectionExpanded.set(true);
     component.inviteForm.controls.email.setValue('');
     fixture.detectChanges();
 
@@ -292,6 +327,7 @@ describe('GroupDetail (viewed by the creator)', () => {
   });
 
   it('enables the "Invitar" button once the email is valid', () => {
+    component.inviteSectionExpanded.set(true);
     component.inviteForm.controls.email.setValue('newperson@example.com');
     fixture.detectChanges();
 
@@ -342,6 +378,7 @@ describe('GroupDetail (viewed by a non-creator member)', () => {
             getKnownContacts: vi.fn().mockResolvedValue(fakeContacts),
           },
         },
+        ...groupChildStubs,
       ],
     }).compileComponents();
 
@@ -397,6 +434,7 @@ describe('GroupDetail (viewed by an admin who is not the creator)', () => {
             getKnownContacts: vi.fn().mockResolvedValue(fakeContacts),
           },
         },
+        ...groupChildStubs,
       ],
     }).compileComponents();
 
@@ -443,6 +481,7 @@ describe('GroupDetail with no suggested contacts', () => {
             getKnownContacts: vi.fn().mockResolvedValue([]), // primer grupo, nadie más que conocer todavía
           },
         },
+        ...groupChildStubs,
       ],
     }).compileComponents();
 
@@ -455,7 +494,83 @@ describe('GroupDetail with no suggested contacts', () => {
   });
 
   it('does not render the contacts section at all', () => {
+    component.inviteSectionExpanded.set(true);
+    fixture.detectChanges();
+
     expect(component.suggestedContacts()).toEqual([]);
     expect(fixture.nativeElement.querySelector('.mfx-group-detail__contacts')).toBeNull();
+  });
+});
+
+describe('GroupDetail — "Invitar" section starts collapsed', () => {
+  let component: GroupDetail;
+  let fixture: ComponentFixture<GroupDetail>;
+  let inviteByEmail: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    inviteByEmail = vi.fn().mockResolvedValue(undefined);
+
+    await TestBed.configureTestingModule({
+      imports: [GroupDetail],
+      providers: [
+        { provide: Auth, useValue: { currentUser: { uid: 'u1', email: 'diego@example.com' }, isAdmin: false } },
+        {
+          provide: GroupsService,
+          useValue: {
+            groups$: of([fakeGroup]),
+            leave: vi.fn(),
+            removeMember: vi.fn(),
+            remove: vi.fn(),
+            inviteByEmail,
+            inviteByUid: vi.fn(),
+            getMemberProfiles: vi.fn().mockResolvedValue(fakeMemberProfiles),
+            getKnownContacts: vi.fn().mockResolvedValue(fakeContacts),
+          },
+        },
+        ...groupChildStubs,
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(GroupDetail);
+    fixture.componentRef.setInput('groupId', 'group1');
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    await flushMicrotasks();
+    fixture.detectChanges();
+  });
+
+  it('starts collapsed, showing only the "+ Invitar miembro" link', () => {
+    expect(component.inviteSectionExpanded()).toBe(false);
+    expect(fixture.nativeElement.querySelector('.mfx-form')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('+ Invitar miembro');
+  });
+
+  it('expands on toggle, revealing the email form', () => {
+    component.toggleInviteSection();
+    fixture.detectChanges();
+
+    expect(component.inviteSectionExpanded()).toBe(true);
+    expect(fixture.nativeElement.querySelector('.mfx-form')).toBeTruthy();
+  });
+
+  it('collapses again on a second toggle', () => {
+    component.toggleInviteSection();
+    component.toggleInviteSection();
+    fixture.detectChanges();
+
+    expect(component.inviteSectionExpanded()).toBe(false);
+    expect(fixture.nativeElement.querySelector('.mfx-form')).toBeNull();
+  });
+
+  it('collapses automatically after a successful email invite, and still shows the success message', async () => {
+    component.toggleInviteSection();
+    component.inviteForm.setValue({ email: 'friend@example.com' });
+
+    await component.invite();
+    fixture.detectChanges();
+
+    expect(component.inviteSectionExpanded()).toBe(false);
+    expect(fixture.nativeElement.querySelector('.mfx-form')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('¡Invitación enviada!');
   });
 });
