@@ -138,6 +138,10 @@ export class Movements {
     return this.categoriesById().get(categoryId)?.name ?? 'Categoría eliminada';
   }
 
+  formatDate(date: Timestamp): string {
+    return date.toDate().toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
+  }
+
   openCreateAccount(): void {
     this.accountFormState.openCreate();
   }

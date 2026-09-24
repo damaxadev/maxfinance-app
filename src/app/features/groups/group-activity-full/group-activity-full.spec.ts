@@ -22,15 +22,18 @@ function configure(getMemberProfiles: ReturnType<typeof vi.fn>) {
   return TestBed.configureTestingModule({
     imports: [GroupActivityFull],
     providers: [
-      { provide: GroupsService, useValue: { getMemberProfiles } },
+      { provide: GroupsService, useValue: { getMemberProfiles, groups$: of([]) } },
       { provide: Auth, useValue: { currentUser: { uid: 'u1' } } },
       { provide: Accounts, useValue: { accounts$: of([]) } },
       { provide: Categories, useValue: { categories$: of([]) } },
-      { provide: MovementsService, useValue: { groupMovements$: () => of([]), countGroupMovements: vi.fn().mockResolvedValue(0) } },
+      {
+        provide: MovementsService,
+        useValue: { allSharedMovementsForGroups$: () => of([]), countGroupMovements: vi.fn().mockResolvedValue(0) },
+      },
       {
         provide: SettlementsService,
         useValue: {
-          settlements$: () => of([]),
+          settlementsForGroups$: () => of([]),
           findLinkedMovementSettlementIds: vi.fn().mockResolvedValue(new Set()),
           countGroupSettlements: vi.fn().mockResolvedValue(0),
         },

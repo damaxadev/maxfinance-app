@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable, catchError, firstValueFrom, of, switchMap } from 'rxjs';
+import { Observable, catchError, combineLatest, firstValueFrom, map, of, switchMap } from 'rxjs';
 import {
   Firestore,
   Timestamp,
@@ -59,6 +59,27 @@ export class SettlementsService {
       }),
       catchError((error) => {
         console.error('Error al cargar los settlements del grupo', error);
+        return of([]);
+      })
+    );
+  }
+
+  // Settlements de varios grupos a la vez — un query por grupo (mismo
+  // criterio que MovementsService.allSharedMovementsForGroups$: cada uno
+  // sigue siendo un filtro de igualdad sobre una constante conocida, provable
+  // por la regla). Usado por GroupActivity cuando recibe más de un groupId
+  // (ver Inicio, "Gastos compartidos recientes").
+  settlementsForGroups$(groupIds: string[]): Observable<SettlementWithId[]> {
+    return this.auth.currentUser$.pipe(
+      switchMap((user) => {
+        if (!user || groupIds.length === 0) {
+          return of([]);
+        }
+        const queries$ = groupIds.map((groupId) => this.settlements$(groupId));
+        return combineLatest(queries$).pipe(map((lists) => lists.flat()));
+      }),
+      catchError((error) => {
+        console.error('Error al cargar los settlements de los grupos', error);
         return of([]);
       })
     );

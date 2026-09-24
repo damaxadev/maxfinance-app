@@ -22,7 +22,7 @@
       </div>
 
       <div class="mfx-group-balance__action">
-        <mfx-animated-number class="mfx-group-balance__amount" [value]="edge.amount" [decimals]="2" prefix="$ " />
+        <mfx-animated-number class="mfx-group-balance__amount" [value]="edge.amount" />
         @if (canSettle(edge)) {
           <button type="button" class="mfx-btn-primary" (click)="markAsSettled(edge)">Marcar como saldada</button>
         }

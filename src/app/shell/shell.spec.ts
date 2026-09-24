@@ -6,6 +6,7 @@ import { of } from 'rxjs';
 import { vi } from 'vitest';
 
 import { Shell } from './shell';
+import { ActiveTabState } from '../core/active-tab-state/active-tab-state';
 import { Auth } from '../core/auth/auth';
 import { Accounts } from '../core/accounts/accounts';
 import { Budgets } from '../core/budgets/budgets';
@@ -22,6 +23,21 @@ import { CategoryForm } from '../features/categories/category-form/category-form
 import { GroupForm } from '../features/groups/group-form/group-form';
 import { GroupDetail } from '../features/groups/group-detail/group-detail';
 import { RecurringPaymentForm } from '../features/recurring-payments/recurring-payment-form/recurring-payment-form';
+
+// Shell siempre renderiza Home como uno de sus swiper-slides, y Home crea
+// gráficas Chart.js reales — jsdom no implementa un contexto 2D de canvas
+// (mismo motivo que se mockea en home.spec.ts), así que sin este mock,
+// CUALQUIER test de Shell fallaría al montar Home. No se necesita inspeccionar
+// las instancias acá, solo que no explote.
+vi.mock('chart.js', () => ({
+  Chart: class {
+    static register = vi.fn();
+    data = { labels: [], datasets: [{ data: [] }] };
+    update = vi.fn();
+    destroy = vi.fn();
+  },
+  registerables: [],
+}));
 
 const fakeGroup = { id: 'group1', name: 'Apartamento', members: ['u1'], createdBy: 'u1', createdAt: {} as never };
 
@@ -83,6 +99,7 @@ describe('Shell', () => {
             personalMovements$: of([]),
             groupMovements$: () => of([]),
             sharedMovementsForGroups$: () => of([]),
+            allSharedMovementsForGroups$: () => of([]),
             combinedMovements$: () => of([]),
             countGroupMovements: vi.fn().mockResolvedValue(0),
           },
@@ -97,6 +114,7 @@ describe('Shell', () => {
           provide: SettlementsService,
           useValue: {
             settlements$: () => of([]),
+            settlementsForGroups$: () => of([]),
             findLinkedMovementSettlementIds: vi.fn().mockResolvedValue(new Set()),
             countGroupSettlements: vi.fn().mockResolvedValue(0),
           },
@@ -186,6 +204,25 @@ describe('Shell', () => {
     fixture.detectChanges();
 
     expect(component.groupFormState.open()).toBe(true);
+  });
+
+  it('slides to the requested tab via ActiveTabState (e.g. a dashboard section header)', () => {
+    const activeTabState = TestBed.inject(ActiveTabState);
+
+    activeTabState.requestTab(3);
+    fixture.detectChanges();
+
+    expect(component.activeIndex()).toBe(3);
+    expect(swiperEl().swiper.slideTo).toHaveBeenCalledWith(3);
+    expect(activeTabState.requestedIndex()).toBeNull();
+  });
+
+  it('opens the create-recurring-payment form when the FAB requests it', () => {
+    const fab = fixture.debugElement.query(By.directive(Fab)).componentInstance as Fab;
+    fab.recurringRequested.emit();
+    fixture.detectChanges();
+
+    expect(component.recurringPaymentFormState.request()).toEqual({ mode: 'create' });
   });
 
   it('renders the movement form modal once a request is open', () => {
@@ -313,5 +350,22 @@ describe('Shell', () => {
     fixture.detectChanges();
 
     expect(component.recurringPaymentFormState.request()).toBeNull();
+  });
+
+  it('renders the balances modal once BalancesModalState is open', () => {
+    component.balancesModalState.show();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('mfx-balances-modal')).toBeTruthy();
+  });
+
+  it('closes the balances modal via the shared state', () => {
+    component.balancesModalState.show();
+    fixture.detectChanges();
+
+    component.balancesModalState.close();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('mfx-balances-modal')).toBeNull();
   });
 });

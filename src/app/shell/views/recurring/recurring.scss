@@ -1,0 +1,19 @@
+.mfx-recurring__row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+
+  span:first-child {
+    flex: 1;
+  }
+}
+
+.mfx-recurring__status {
+  font-size: 0.75rem;
+  color: var(--primary);
+
+  &--inactive {
+    opacity: 0.5;
+    color: var(--text);
+  }
+}

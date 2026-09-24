@@ -10,6 +10,8 @@ import { GroupsService, type GroupMemberProfile } from '../../../core/groups/gro
 import { MovementsService } from '../../../core/movements/movements';
 import type { MovementSplit, SplitType } from '../../../models/movement.model';
 import { Avatar } from '../../../shared/avatar/avatar';
+import { MfxCurrencyInputDirective } from '../../../shared/currency/currency-input.directive';
+import { MfxCurrencyPipe } from '../../../shared/currency/currency.pipe';
 
 function toDateInputValue(date: Date): string {
   const yyyy = date.getFullYear();
@@ -59,7 +61,7 @@ type SplitInputGroup = FormGroup<{ uid: FormControl<string>; value: FormControl<
 
 @Component({
   selector: 'mfx-shared-expense-form',
-  imports: [ReactiveFormsModule, Avatar],
+  imports: [ReactiveFormsModule, Avatar, MfxCurrencyInputDirective, MfxCurrencyPipe],
   templateUrl: './shared-expense-form.html',
   styleUrl: './shared-expense-form.scss',
 })

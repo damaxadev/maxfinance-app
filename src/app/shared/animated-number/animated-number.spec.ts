@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AnimatedNumber } from './animated-number';
 
+function digitsOnly(text: string): number {
+  return Number(text.replace(/[^0-9]/g, ''));
+}
+
 describe('AnimatedNumber', () => {
   let component: AnimatedNumber;
   let fixture: ComponentFixture<AnimatedNumber>;
@@ -28,14 +32,14 @@ describe('AnimatedNumber', () => {
     expect(component).toBeTruthy();
   });
 
-  it('counts up from 0 to the target value', () => {
+  it('counts up from 0 to the target value, formatted as Colombian pesos', () => {
     fixture.componentRef.setInput('value', 100);
     fixture.detectChanges();
 
     vi.advanceTimersByTime(800);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent.trim()).toBe('100');
+    expect(fixture.nativeElement.textContent.trim()).toBe('$ 100');
   });
 
   it('animates from the previous value, not from 0 again, on a second change', () => {
@@ -49,25 +53,54 @@ describe('AnimatedNumber', () => {
     vi.advanceTimersByTime(400);
     fixture.detectChanges();
 
-    const midway = Number(fixture.nativeElement.textContent.trim());
+    const midway = digitsOnly(fixture.nativeElement.textContent.trim());
     expect(midway).toBeLessThan(100);
     expect(midway).toBeGreaterThan(40);
 
     vi.advanceTimersByTime(400);
     fixture.detectChanges();
-    expect(fixture.nativeElement.textContent.trim()).toBe('40');
+    expect(fixture.nativeElement.textContent.trim()).toBe('$ 40');
   });
 
-  it('applies prefix, suffix and decimals', () => {
-    fixture.componentRef.setInput('decimals', 2);
-    fixture.componentRef.setInput('prefix', '$');
-    fixture.componentRef.setInput('suffix', ' COP');
-    fixture.componentRef.setInput('value', 50);
+  it('never shows the "COP" code, only the "$" symbol', () => {
+    fixture.componentRef.setInput('value', 150000);
+    fixture.detectChanges();
+    vi.advanceTimersByTime(800);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('$');
+    expect(fixture.nativeElement.textContent).not.toContain('COP');
+  });
+
+  it('shows a "+" sign when showSign is true and the value is positive (e.g. income)', () => {
+    fixture.componentRef.setInput('showSign', true);
+    fixture.componentRef.setInput('value', 50000);
     fixture.detectChanges();
 
     vi.advanceTimersByTime(800);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent.trim()).toBe('$50.00 COP');
+    expect(fixture.nativeElement.textContent.trim()).toBe('+$ 50.000');
+  });
+
+  it('shows a "-" sign when showSign is true and the value is negative (e.g. expense)', () => {
+    fixture.componentRef.setInput('showSign', true);
+    fixture.componentRef.setInput('value', -50000);
+    fixture.detectChanges();
+
+    vi.advanceTimersByTime(800);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent.trim()).toBe('-$ 50.000');
+  });
+
+  it('shows no sign at all by default, even for a positive value', () => {
+    fixture.componentRef.setInput('value', 50000);
+    fixture.detectChanges();
+
+    vi.advanceTimersByTime(800);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent.trim()).toBe('$ 50.000');
   });
 });

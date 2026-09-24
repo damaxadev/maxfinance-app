@@ -1,14 +1,17 @@
-import { Component, CUSTOM_ELEMENTS_SCHEMA, ElementRef, OnDestroy, AfterViewInit, inject, viewChild, signal } from '@angular/core';
+import { Component, CUSTOM_ELEMENTS_SCHEMA, ElementRef, OnDestroy, AfterViewInit, effect, inject, viewChild, signal } from '@angular/core';
 import type { SwiperContainer } from 'swiper/element';
 import type { Swiper } from 'swiper';
 
+import { ActiveTabState } from '../core/active-tab-state/active-tab-state';
+import { BalancesModalState } from '../core/balances-modal-state/balances-modal-state';
+import { BalancesModal } from '../features/accounts/balances-modal/balances-modal';
 import { TabBar } from './tab-bar/tab-bar';
 import { Fab } from '../shared/fab/fab';
 import { Modal } from '../shared/modal/modal';
 import { Home } from './views/home/home';
 import { Movements } from './views/movements/movements';
 import { Groups } from './views/groups/groups';
-import { Budget } from './views/budget/budget';
+import { Recurring } from './views/recurring/recurring';
 import { Settings } from './views/settings/settings';
 import { MovementFormState } from '../core/movement-form-state/movement-form-state';
 import { MovementForm } from '../features/movements/movement-form/movement-form';
@@ -44,10 +47,11 @@ import { RecurringPaymentForm } from '../features/recurring-payments/recurring-p
     SharedExpenseForm,
     SettlementForm,
     RecurringPaymentForm,
+    BalancesModal,
     Home,
     Movements,
     Groups,
-    Budget,
+    Recurring,
     Settings,
   ],
   templateUrl: './shell.html',
@@ -65,8 +69,23 @@ export class Shell implements AfterViewInit, OnDestroy {
   readonly sharedExpenseFormState = inject(SharedExpenseFormState);
   readonly settlementFormState = inject(SettlementFormState);
   readonly recurringPaymentFormState = inject(RecurringPaymentFormState);
+  readonly balancesModalState = inject(BalancesModalState);
+  private readonly activeTabState = inject(ActiveTabState);
 
   readonly activeIndex = signal(0);
+
+  constructor() {
+    // Puente para navegación entre tabs desde una vista que no tiene acceso
+    // directo al swiper (ver ActiveTabState) — p. ej. los encabezados de
+    // sección de Inicio ("ver todos" hacia Movimientos/Recurrentes/Grupos).
+    effect(() => {
+      const index = this.activeTabState.requestedIndex();
+      if (index !== null) {
+        this.onTabSelected(index);
+        this.activeTabState.consume();
+      }
+    });
+  }
 
   // Se suscribe directo a la instancia de Swiper (swiper.on/off), no al
   // CustomEvent 'slidechange' que <swiper-container> reenvía desde su shadow

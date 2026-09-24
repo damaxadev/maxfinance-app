@@ -1,5 +1,7 @@
 import { Component, DestroyRef, computed, effect, inject, input, signal } from '@angular/core';
 
+import { formatCOP } from '../currency/currency';
+
 @Component({
   selector: 'mfx-animated-number',
   imports: [],
@@ -9,14 +11,12 @@ import { Component, DestroyRef, computed, effect, inject, input, signal } from '
 export class AnimatedNumber {
   readonly value = input.required<number>();
   readonly durationMs = input(800);
-  readonly decimals = input(0);
-  readonly prefix = input('');
-  readonly suffix = input('');
+  // "+"/"-" explícito (ver DESIGN.md) — usado para distinguir ingreso/gasto
+  // en una lista de movimientos, no solo por color.
+  readonly showSign = input(false);
 
   private readonly displayValue = signal(0);
-  readonly formatted = computed(
-    () => `${this.prefix()}${this.displayValue().toFixed(this.decimals())}${this.suffix()}`
-  );
+  readonly formatted = computed(() => formatCOP(this.displayValue(), this.showSign()));
 
   // Valor "en vivo" de la animación, fuera del sistema de señales para no
   // crear un ciclo (el effect solo debe reaccionar a cambios de `value`).

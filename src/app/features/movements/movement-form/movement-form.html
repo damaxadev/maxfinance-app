@@ -22,7 +22,7 @@
 
     <label class="mfx-form__field">
       Monto
-      <input type="number" formControlName="amount" min="0.01" step="0.01" placeholder="0" />
+      <input mfxCurrencyInput formControlName="amount" placeholder="0" />
       @if (form.controls.amount.invalid && form.controls.amount.touched) {
         <span class="mfx-form__error" role="alert">
           @if (form.controls.amount.hasError('required')) {

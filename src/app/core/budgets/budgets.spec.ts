@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { Firestore, collectionData, doc, setDoc } from '@angular/fire/firestore';
+import { Firestore, collectionData, deleteDoc, doc, setDoc } from '@angular/fire/firestore';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
 
@@ -12,6 +12,7 @@ vi.mock('@angular/fire/firestore', () => ({
   collectionData: vi.fn(() => of([])),
   doc: vi.fn((_fs, path, id) => ({ path, id })),
   setDoc: vi.fn().mockResolvedValue(undefined),
+  deleteDoc: vi.fn().mockResolvedValue(undefined),
   query: vi.fn((...args: unknown[]) => args),
   where: vi.fn((field: string, op: string, value: unknown) => ({ field, op, value })),
 }));
@@ -23,6 +24,7 @@ describe('Budgets', () => {
   beforeEach(() => {
     vi.mocked(collectionData).mockClear().mockReturnValue(of([]));
     vi.mocked(setDoc).mockClear().mockResolvedValue(undefined);
+    vi.mocked(deleteDoc).mockClear().mockResolvedValue(undefined);
     vi.mocked(doc).mockClear();
 
     TestBed.configureTestingModule({
@@ -55,5 +57,11 @@ describe('Budgets', () => {
       { path: 'budgets', id: 'u1_cat1_2026-03' },
       { uid: 'u1', categoryId: 'cat1', month: '2026-03', limit: 200 }
     );
+  });
+
+  it('removeLimit(): deletes the same deterministic id', async () => {
+    await service.removeLimit('cat1', '2026-03');
+
+    expect(deleteDoc).toHaveBeenCalledWith({ path: 'budgets', id: 'u1_cat1_2026-03' });
   });
 });

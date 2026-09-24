@@ -13,16 +13,24 @@ import { GroupDetail } from './group-detail';
 
 // GroupBalance y GroupActivity (renderizados dentro de GroupDetail) inyectan
 // estos servicios — se stubean vacíos en las cuatro suites de este archivo,
-// ya que ambos se prueban por separado en sus propios specs.
+// ya que ambos se prueban por separado en sus propios specs. GroupBalance
+// usa groupMovements$ (un solo grupo); GroupActivity usa
+// allSharedMovementsForGroups$ (uno o varios) — ambos necesitan su propio
+// método en el stub.
 const groupChildStubs = [
   {
     provide: MovementsService,
-    useValue: { groupMovements$: () => of([]), countGroupMovements: vi.fn().mockResolvedValue(0) },
+    useValue: {
+      groupMovements$: () => of([]),
+      allSharedMovementsForGroups$: () => of([]),
+      countGroupMovements: vi.fn().mockResolvedValue(0),
+    },
   },
   {
     provide: SettlementsService,
     useValue: {
       settlements$: () => of([]),
+      settlementsForGroups$: () => of([]),
       findLinkedMovementSettlementIds: vi.fn().mockResolvedValue(new Set()),
       countGroupSettlements: vi.fn().mockResolvedValue(0),
     },

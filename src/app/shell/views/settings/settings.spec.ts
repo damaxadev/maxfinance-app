@@ -5,29 +5,42 @@ import { of } from 'rxjs';
 import { vi } from 'vitest';
 
 import { Settings } from './settings';
+import { Auth } from '../../../core/auth/auth';
+import { Budgets } from '../../../core/budgets/budgets';
 import { Categories } from '../../../core/categories/categories';
 import { CategoryFormState } from '../../../core/category-form-state/category-form-state';
-import { Notifications } from '../../../core/notifications/notifications';
+import { GroupsService } from '../../../core/groups/groups';
+import { MovementsService } from '../../../core/movements/movements';
 
 const fakeCategories = [
-  { id: 'cat1', uid: null, name: 'Comida', icon: '🍔', type: 'expense' as const },
+  { id: 'cat-food', uid: null, name: 'Comida', icon: '🍔', type: 'expense' as const },
+  { id: 'cat-transport', uid: null, name: 'Transporte', icon: '🚌', type: 'expense' as const },
   { id: 'cat2', uid: 'u1', name: 'Mascotas', icon: '🐶', type: 'expense' as const },
+  { id: 'cat-income', uid: null, name: 'Salario', icon: '💼', type: 'income' as const },
 ];
 
-async function flushMicrotasks(): Promise<void> {
-  for (let i = 0; i < 4; i++) {
-    await Promise.resolve();
-  }
+function ts(date: Date) {
+  return { toDate: () => date } as never;
 }
 
-function configure(checkStatus: ReturnType<typeof vi.fn>, enable: ReturnType<typeof vi.fn>) {
+function configure(opts: { budgets?: unknown[]; movements?: unknown[]; setLimit?: ReturnType<typeof vi.fn> } = {}) {
   return TestBed.configureTestingModule({
     imports: [Settings],
     providers: [
       provideNoopAnimations(),
       provideRouter([]),
+      { provide: Auth, useValue: { currentUser: { uid: 'u1' } } },
       { provide: Categories, useValue: { categories$: of(fakeCategories) } },
-      { provide: Notifications, useValue: { checkStatus, enable } },
+      { provide: GroupsService, useValue: { groups$: of([]) } },
+      { provide: MovementsService, useValue: { combinedMovements$: () => of(opts.movements ?? []) } },
+      {
+        provide: Budgets,
+        useValue: {
+          budgetsForMonth$: () => of(opts.budgets ?? []),
+          setLimit: opts.setLimit ?? vi.fn().mockResolvedValue(undefined),
+          removeLimit: vi.fn().mockResolvedValue(undefined),
+        },
+      },
     ],
   }).compileComponents();
 }
@@ -35,18 +48,16 @@ function configure(checkStatus: ReturnType<typeof vi.fn>, enable: ReturnType<typ
 describe('Settings', () => {
   let component: Settings;
   let fixture: ComponentFixture<Settings>;
-  let checkStatus: ReturnType<typeof vi.fn>;
-  let enable: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
-    checkStatus = vi.fn().mockResolvedValue('prompt');
-    enable = vi.fn().mockResolvedValue('granted');
-    await configure(checkStatus, enable);
+    const now = new Date();
+    await configure({
+      budgets: [{ id: 'b1', uid: 'u1', categoryId: 'cat-food', month: 'x', limit: 200 }],
+      movements: [{ categoryId: 'cat-food', amount: 150, type: 'expense', date: ts(now) }],
+    });
 
     fixture = TestBed.createComponent(Settings);
     component = fixture.componentInstance;
-    fixture.detectChanges();
-    await flushMicrotasks();
     fixture.detectChanges();
   });
 
@@ -66,63 +77,140 @@ describe('Settings', () => {
 
   it('delegates opening the category modal in edit mode to the shared CategoryFormState', () => {
     const state = TestBed.inject(CategoryFormState);
-    component.openEditCategory(fakeCategories[1]);
-    expect(state.request()).toEqual({ mode: 'edit', category: fakeCategories[1] });
+    component.openEditCategory(fakeCategories[2]);
+    expect(state.request()).toEqual({ mode: 'edit', category: fakeCategories[2] });
   });
 
-  it('never checks/requests permissions on its own at startup beyond the one silent checkStatus() call', () => {
-    expect(checkStatus).toHaveBeenCalledTimes(1);
-    expect(enable).not.toHaveBeenCalled();
+  it('no longer has a notifications toggle here (moved to Recurrentes)', () => {
+    expect(fixture.nativeElement.textContent).not.toContain('notificaciones');
+    expect(fixture.nativeElement.querySelector('mfx-checkbox')).toBeNull();
   });
 
-  it('starts unchecked and enabled when there is no permission yet', () => {
-    expect(component.notificationsControl.value).toBe(false);
-    expect(component.notificationsControl.disabled).toBe(false);
+  it('only lists categories that already have a budget this month (opt-in)', () => {
+    expect(component.budgetedProgress().map((p) => p.categoryId)).toEqual(['cat-food']);
   });
 
-  it('checking the toggle calls enable() and disables it once granted', async () => {
-    component.notificationsControl.setValue(true);
-    await flushMicrotasks();
-
-    expect(enable).toHaveBeenCalled();
-    expect(component.notificationsControl.value).toBe(true);
-    expect(component.notificationsControl.disabled).toBe(true);
+  it('lists expense categories WITHOUT a budget yet as candidates to add', () => {
+    expect(component.unbudgetedExpenseCategories().map((c) => c.id)).toEqual(['cat-transport', 'cat2']);
   });
 
-  it('reverts the toggle and shows a message when the permission is denied', async () => {
-    enable.mockResolvedValue('denied');
-    component.notificationsControl.setValue(true);
-    await flushMicrotasks();
-
-    expect(component.notificationsControl.value).toBe(false);
-    expect(component.notificationsMessage()).toContain('No concediste el permiso');
+  it('computes progress (limit/spent/percentage) for a budgeted category', () => {
+    expect(component.budgetedProgress()[0]).toEqual({ categoryId: 'cat-food', limit: 200, spent: 150, percentage: 75 });
   });
 
-  it('points to system settings when permanently denied', async () => {
-    enable.mockResolvedValue('denied-permanently');
-    component.notificationsControl.setValue(true);
-    await flushMicrotasks();
+  it('opens the add-budget inline form, defaulted to the unbudgeted categories', () => {
+    component.openAddBudget();
+    fixture.detectChanges();
 
-    expect(component.notificationsMessage()).toContain('ajustes del sistema');
+    expect(component.addingBudget()).toBe(true);
+    const options = Array.from<HTMLOptionElement>(fixture.nativeElement.querySelectorAll('select option'));
+    expect(options.map((o) => o.value)).not.toContain('cat-food'); // ya presupuestada
   });
-});
 
-describe('Settings when notifications are already granted', () => {
-  let component: Settings;
-  let fixture: ComponentFixture<Settings>;
-
-  beforeEach(async () => {
-    await configure(vi.fn().mockResolvedValue('granted'), vi.fn());
-
+  it('submitAddBudget() creates the budget and closes the inline form', async () => {
+    const setLimit = vi.fn().mockResolvedValue(undefined);
+    TestBed.resetTestingModule();
+    await configure({ setLimit });
     fixture = TestBed.createComponent(Settings);
     component = fixture.componentInstance;
     fixture.detectChanges();
-    await flushMicrotasks();
+
+    component.openAddBudget();
+    component.addBudgetForm.setValue({ categoryId: 'cat-transport', limit: 100000 });
+
+    await component.submitAddBudget();
+
+    expect(setLimit).toHaveBeenCalledWith({ categoryId: 'cat-transport', month: expect.any(String), limit: 100000 });
+    expect(component.addingBudget()).toBe(false);
+  });
+
+  it('does not submit an invalid add-budget form', async () => {
+    const setLimit = vi.fn();
+    TestBed.resetTestingModule();
+    await configure({ setLimit });
+    fixture = TestBed.createComponent(Settings);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    component.openAddBudget();
+
+    await component.submitAddBudget();
+
+    expect(setLimit).not.toHaveBeenCalled();
+  });
+
+  it('shows an inline error if adding a budget fails', async () => {
+    const setLimit = vi.fn().mockRejectedValue(new Error('boom'));
+    TestBed.resetTestingModule();
+    await configure({ setLimit });
+    fixture = TestBed.createComponent(Settings);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    component.openAddBudget();
+    component.addBudgetForm.setValue({ categoryId: 'cat-transport', limit: 100000 });
+
+    await component.submitAddBudget();
+
+    expect(component.budgetError()).toBe('No pudimos agregar la categoría. Intenta de nuevo.');
+  });
+
+  it('startEditLimit() opens inline editing prefilled with the current limit', () => {
+    component.startEditLimit(component.budgetedProgress()[0]);
+
+    expect(component.editingCategoryId()).toBe('cat-food');
+    expect(component.editLimitControl.value).toBe(200);
+  });
+
+  it('saveEditLimit() persists the new limit and closes the inline editor', async () => {
+    const setLimit = vi.fn().mockResolvedValue(undefined);
+    TestBed.resetTestingModule();
+    await configure({ setLimit, budgets: [{ id: 'b1', uid: 'u1', categoryId: 'cat-food', month: 'x', limit: 200 }] });
+    fixture = TestBed.createComponent(Settings);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    component.startEditLimit(component.budgetedProgress()[0]);
+    component.editLimitControl.setValue(500000);
+
+    await component.saveEditLimit('cat-food');
+
+    expect(setLimit).toHaveBeenCalledWith({ categoryId: 'cat-food', month: expect.any(String), limit: 500000 });
+    expect(component.editingCategoryId()).toBeNull();
+  });
+
+  it('cancelEditLimit() closes the inline editor without saving', () => {
+    component.startEditLimit(component.budgetedProgress()[0]);
+    component.cancelEditLimit();
+
+    expect(component.editingCategoryId()).toBeNull();
+  });
+
+  it('removeBudget() calls Budgets.removeLimit()', async () => {
+    const budgetsService = TestBed.inject(Budgets);
+
+    await component.removeBudget('cat-food');
+
+    expect(budgetsService.removeLimit).toHaveBeenCalledWith('cat-food', expect.any(String));
+  });
+
+  it('shows an inline error if removing a budget fails', async () => {
+    const budgetsService = TestBed.inject(Budgets);
+    vi.mocked(budgetsService.removeLimit).mockRejectedValue(new Error('boom'));
+
+    await component.removeBudget('cat-food');
+
+    expect(component.budgetError()).toBe('No pudimos quitar la categoría. Intenta de nuevo.');
+  });
+});
+
+describe('Settings with no budgeted categories yet', () => {
+  let fixture: ComponentFixture<Settings>;
+
+  beforeEach(async () => {
+    await configure({ budgets: [] });
+    fixture = TestBed.createComponent(Settings);
     fixture.detectChanges();
   });
 
-  it('shows the toggle already checked and disabled (cannot revoke a system permission from here)', () => {
-    expect(component.notificationsControl.value).toBe(true);
-    expect(component.notificationsControl.disabled).toBe(true);
+  it('shows the empty state instead of any category card', () => {
+    expect(fixture.nativeElement.textContent).toContain('Todavía no presupuestas ninguna categoría');
   });
 });

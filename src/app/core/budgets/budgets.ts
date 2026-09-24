@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, of, switchMap } from 'rxjs';
-import { Firestore, collection, collectionData, doc, query, setDoc, where } from '@angular/fire/firestore';
+import { Firestore, collection, collectionData, deleteDoc, doc, query, setDoc, where } from '@angular/fire/firestore';
 
 import { Auth } from '../auth/auth';
 import type { Budget } from '../../models/budget.model';
@@ -51,6 +51,14 @@ export class Budgets {
     const ref = doc(this.firestore, 'budgets', `${uid}_${value.categoryId}_${value.month}`);
     const budget: Budget = { uid, categoryId: value.categoryId, month: value.month, limit: value.limit };
     await setDoc(ref, budget);
+  }
+
+  // Quitar una categoría del presupuesto (opt-in, Fase 7): no hay que
+  // preservar ningún historial especial — los budgets ya son por mes, así
+  // que borrar el doc de uno no afecta a los de meses anteriores/futuros.
+  async removeLimit(categoryId: string, month: string): Promise<void> {
+    const uid = this.requireUid();
+    await deleteDoc(doc(this.firestore, 'budgets', `${uid}_${categoryId}_${month}`));
   }
 
   private requireUid(): string {

@@ -1,0 +1,45 @@
+<div class="mfx-balances-modal">
+  <mfx-card class="mfx-gradient-hero mfx-balances-modal__hero" [index]="0">
+    <p class="mfx-balances-modal__hero-label">Balance total</p>
+    <mfx-animated-number class="mfx-balances-modal__hero-amount" [value]="totalBalance()" />
+  </mfx-card>
+
+  <p class="mfx-balances-modal__subheading">Por cuenta</p>
+
+  @if (accounts().length === 0) {
+    <mfx-card [index]="1">
+      <p>Todavía no tienes cuentas.</p>
+    </mfx-card>
+  } @else {
+    @for (account of accounts(); track account.id; let i = $index) {
+      <mfx-card [index]="i + 1">
+        <div class="mfx-balances-modal__account">
+          <span>{{ account.name }}</span>
+          <mfx-animated-number [value]="account.balance" />
+        </div>
+      </mfx-card>
+    }
+  }
+
+  <button
+    type="button"
+    class="mfx-btn-primary mfx-balances-modal__analyze"
+    [disabled]="analyzing()"
+    (click)="analyzeBalances()"
+  >
+    {{ analyzing() ? 'Analizando...' : '✨ Analizar balances' }}
+  </button>
+
+  @if (analysisError(); as error) {
+    <p class="mfx-form__error">{{ error }}</p>
+  }
+
+  @if (analysisResult(); as result) {
+    <mfx-card class="mfx-balances-modal__analysis">
+      <p class="mfx-balances-modal__analysis-text">{{ result.summary }}</p>
+      @if (cachedAgeLabel(); as ageLabel) {
+        <p class="mfx-balances-modal__analysis-note">Análisis de hace {{ ageLabel }} — el próximo se genera después de las 24h.</p>
+      }
+    </mfx-card>
+  }
+</div>

@@ -20,12 +20,19 @@ describe('TabBar', () => {
     expect(component).toBeTruthy();
   });
 
-  it('renders the 5 sections in order', () => {
-    const labels = Array.from<HTMLButtonElement>(
-      fixture.nativeElement.querySelectorAll('.mfx-tab-bar__item')
-    ).map((el) => el.textContent?.trim());
+  it('renders the 5 sections in order, each with an icon', () => {
+    const items = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('.mfx-tab-bar__item'));
 
-    expect(labels).toEqual(['Inicio', 'Movimientos', 'Grupos', 'Presupuesto', 'Ajustes']);
+    expect(items.map((el) => el.textContent?.trim())).toEqual([
+      '🏠 Inicio',
+      '💳 Movimientos',
+      '👥 Grupos',
+      '🔁 Recurrentes',
+      '⚙️ Ajustes',
+    ]);
+    for (const item of items) {
+      expect(item.querySelector('.mfx-tab-bar__icon')).toBeTruthy();
+    }
   });
 
   it('emits the tapped tab index', () => {
@@ -42,6 +49,6 @@ describe('TabBar', () => {
     fixture.detectChanges();
 
     const active = fixture.nativeElement.querySelector('.mfx-tab-bar__item--active');
-    expect(active.textContent.trim()).toBe('Presupuesto');
+    expect(active.textContent.trim()).toBe('🔁 Recurrentes');
   });
 });
