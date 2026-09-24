@@ -26,6 +26,8 @@ import { SharedExpenseFormState } from '../core/shared-expense-form-state/shared
 import { SharedExpenseForm } from '../features/groups/shared-expense-form/shared-expense-form';
 import { SettlementFormState } from '../core/settlement-form-state/settlement-form-state';
 import { SettlementForm } from '../features/groups/settlement-form/settlement-form';
+import { RecurringPaymentFormState } from '../core/recurring-payment-form-state/recurring-payment-form-state';
+import { RecurringPaymentForm } from '../features/recurring-payments/recurring-payment-form/recurring-payment-form';
 
 @Component({
   selector: 'mfx-shell',
@@ -41,6 +43,7 @@ import { SettlementForm } from '../features/groups/settlement-form/settlement-fo
     GroupActivityFull,
     SharedExpenseForm,
     SettlementForm,
+    RecurringPaymentForm,
     Home,
     Movements,
     Groups,
@@ -61,6 +64,7 @@ export class Shell implements AfterViewInit, OnDestroy {
   readonly groupActivityFullState = inject(GroupActivityFullState);
   readonly sharedExpenseFormState = inject(SharedExpenseFormState);
   readonly settlementFormState = inject(SettlementFormState);
+  readonly recurringPaymentFormState = inject(RecurringPaymentFormState);
 
   readonly activeIndex = signal(0);
 

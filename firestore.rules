@@ -39,7 +39,10 @@ service cloud.firestore {
       allow create: if isOwner(request.resource.data.uid);
     }
 
-    // budgets — siempre personales
+    // budgets — siempre personales. Verificado con el flujo real de Fase 6
+    // (Budgets.setLimit(), id determinístico uid_categoryId_month): sigue
+    // siendo un create/update normal sobre el propio doc, no hizo falta
+    // tocar nada.
     match /budgets/{budgetId} {
       allow read, update, delete: if isOwner(resource.data.uid);
       allow create: if isOwner(request.resource.data.uid);
@@ -47,6 +50,13 @@ service cloud.firestore {
 
     // recurringPayments — reglas para la variante personal (uid != null).
     // TODO (Fase 5): reglas para recurringPayments de grupo (uid == null, groupId != null).
+    // Verificado con el flujo real de Fase 6 (RecurringPaymentsService CRUD
+    // desde el cliente + la Cloud Function programada que crea el movement
+    // resultante y avanza nextDate): el CRUD del cliente sigue siendo
+    // create/update/delete normales sobre el propio doc, sin cambios. La
+    // función programada corre con el Admin SDK (bypassa estas reglas por
+    // diseño, igual que inviteGroupMember/leaveGroup), así que tampoco
+    // necesitó ningún permiso adicional acá.
     match /recurringPayments/{paymentId} {
       allow read, update, delete: if resource.data.uid != null && isOwner(resource.data.uid);
       allow create: if request.resource.data.uid != null && isOwner(request.resource.data.uid);

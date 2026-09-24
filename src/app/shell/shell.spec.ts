@@ -8,8 +8,11 @@ import { vi } from 'vitest';
 import { Shell } from './shell';
 import { Auth } from '../core/auth/auth';
 import { Accounts } from '../core/accounts/accounts';
+import { Budgets } from '../core/budgets/budgets';
 import { Categories } from '../core/categories/categories';
 import { MovementsService } from '../core/movements/movements';
+import { Notifications } from '../core/notifications/notifications';
+import { RecurringPayments } from '../core/recurring-payments/recurring-payments';
 import { SettlementsService } from '../core/settlements/settlements';
 import { GroupsService } from '../core/groups/groups';
 import { Fab } from '../shared/fab/fab';
@@ -18,6 +21,7 @@ import { AccountForm } from '../features/accounts/account-form/account-form';
 import { CategoryForm } from '../features/categories/category-form/category-form';
 import { GroupForm } from '../features/groups/group-form/group-form';
 import { GroupDetail } from '../features/groups/group-detail/group-detail';
+import { RecurringPaymentForm } from '../features/recurring-payments/recurring-payment-form/recurring-payment-form';
 
 const fakeGroup = { id: 'group1', name: 'Apartamento', members: ['u1'], createdBy: 'u1', createdAt: {} as never };
 
@@ -79,8 +83,15 @@ describe('Shell', () => {
             personalMovements$: of([]),
             groupMovements$: () => of([]),
             sharedMovementsForGroups$: () => of([]),
+            combinedMovements$: () => of([]),
             countGroupMovements: vi.fn().mockResolvedValue(0),
           },
+        },
+        { provide: Budgets, useValue: { budgetsForMonth$: () => of([]) } },
+        { provide: RecurringPayments, useValue: { personalRecurringPayments$: of([]) } },
+        {
+          provide: Notifications,
+          useValue: { checkStatus: vi.fn().mockResolvedValue('prompt'), enable: vi.fn().mockResolvedValue('granted') },
         },
         {
           provide: SettlementsService,
@@ -284,5 +295,23 @@ describe('Shell', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('mfx-group-activity-full')).toBeNull();
+  });
+
+  it('renders the recurring payment form modal once a request is open', () => {
+    component.recurringPaymentFormState.openCreate();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('mfx-recurring-payment-form')).toBeTruthy();
+  });
+
+  it('closes the recurring payment modal when the form is saved', () => {
+    component.recurringPaymentFormState.openCreate();
+    fixture.detectChanges();
+
+    const form = fixture.debugElement.query(By.directive(RecurringPaymentForm)).componentInstance as RecurringPaymentForm;
+    form.saved.emit();
+    fixture.detectChanges();
+
+    expect(component.recurringPaymentFormState.request()).toBeNull();
   });
 });

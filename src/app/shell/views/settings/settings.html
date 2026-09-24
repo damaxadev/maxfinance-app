@@ -7,17 +7,28 @@
   </mfx-card>
 
   <div class="mfx-section-header">
+    <h2>Notificaciones</h2>
+  </div>
+
+  <mfx-card [index]="1">
+    <mfx-checkbox [formControl]="notificationsControl">Activar notificaciones de pagos recurrentes</mfx-checkbox>
+    @if (notificationsMessage()) {
+      <p class="mfx-form__success">{{ notificationsMessage() }}</p>
+    }
+  </mfx-card>
+
+  <div class="mfx-section-header">
     <h2>Categorías personalizadas</h2>
     <button type="button" class="mfx-section-add" (click)="openCreateCategory()">+ Categoría</button>
   </div>
 
   @if (customCategories().length === 0) {
-    <mfx-card [index]="1">
+    <mfx-card [index]="2">
       <p>No tienes categorías personalizadas todavía. Las categorías base ya están disponibles al agregar un movimiento.</p>
     </mfx-card>
   } @else {
     @for (category of customCategories(); track category.id; let i = $index) {
-      <mfx-card [index]="i + 1" (click)="openEditCategory(category)">
+      <mfx-card [index]="i + 2" (click)="openEditCategory(category)">
         <span>{{ category.icon }} {{ category.name }} · {{ category.type === 'income' ? 'Ingreso' : 'Gasto' }}</span>
       </mfx-card>
     }

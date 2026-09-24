@@ -13,7 +13,7 @@
 
   <mfx-card [index]="1">
     <p>Presupuesto del mes</p>
-    <mfx-progress-ring [percentage]="budgetUsedPercent" />
+    <mfx-progress-ring [percentage]="budgetUsedPercent()" [color]="budgetRingColor()" />
   </mfx-card>
 
   <p>Balance por cuenta</p>
