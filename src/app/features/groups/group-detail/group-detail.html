@@ -39,65 +39,83 @@
     }
 
     <div class="mfx-section-header">
+      <h4>Balance</h4>
+    </div>
+    <mfx-group-balance [groupId]="g.id" [members]="members()" />
+
+    <div class="mfx-section-header">
+      <h4>Actividad reciente</h4>
+    </div>
+    <mfx-group-activity [groupId]="g.id" [members]="members()" />
+
+    <div class="mfx-section-header">
       <h4>Invitar</h4>
+      @if (!inviteSectionExpanded()) {
+        <button type="button" class="mfx-section-add" (click)="toggleInviteSection()">+ Invitar miembro</button>
+      } @else {
+        <button type="button" class="mfx-section-add" (click)="toggleInviteSection()">Ocultar</button>
+      }
     </div>
 
-    @if (suggestedContacts().length > 0) {
-      <div class="mfx-group-detail__contacts">
-        @for (contact of suggestedContacts(); track contact.uid) {
-          <button
-            type="button"
-            class="mfx-group-detail__chip"
-            [disabled]="invitingContactUid() === contact.uid"
-            (click)="inviteContact(contact)"
-          >
-            <mfx-avatar [photoUrl]="contact.photoURL" [displayName]="contact.displayName" [size]="24" />
-            <span>
-              @if (justInvitedUids().has(contact.uid)) {
-                Invitado ✓
-              } @else if (invitingContactUid() === contact.uid) {
-                Invitando…
-              } @else {
-                {{ contact.displayName || 'Sin nombre' }}
-              }
-            </span>
-          </button>
-        }
-      </div>
+    @if (inviteSuccess()) {
+      <p class="mfx-form__success">¡Invitación enviada!</p>
     }
 
-    <form class="mfx-form" [formGroup]="inviteForm" (ngSubmit)="invite()">
-      <label class="mfx-form__field">
-        Correo
-        <input type="email" formControlName="email" placeholder="persona@correo.com" />
-        @if (inviteForm.controls.email.invalid && inviteForm.controls.email.touched) {
-          <span class="mfx-form__error" role="alert">
-            @if (inviteForm.controls.email.hasError('required')) {
-              El correo es obligatorio.
-            } @else if (inviteForm.controls.email.hasError('email')) {
-              Ingresa un correo válido.
-            } @else if (inviteForm.controls.email.hasError('selfInvite')) {
-              No puedes invitarte a ti mismo.
-            } @else if (inviteForm.controls.email.hasError('alreadyMember')) {
-              Ya es miembro de este grupo.
-            }
-          </span>
+    @if (inviteSectionExpanded()) {
+      @if (suggestedContacts().length > 0) {
+        <div class="mfx-group-detail__contacts">
+          @for (contact of suggestedContacts(); track contact.uid) {
+            <button
+              type="button"
+              class="mfx-group-detail__chip"
+              [disabled]="invitingContactUid() === contact.uid"
+              (click)="inviteContact(contact)"
+            >
+              <mfx-avatar [photoUrl]="contact.photoURL" [displayName]="contact.displayName" [size]="24" />
+              <span>
+                @if (justInvitedUids().has(contact.uid)) {
+                  Invitado ✓
+                } @else if (invitingContactUid() === contact.uid) {
+                  Invitando…
+                } @else {
+                  {{ contact.displayName || 'Sin nombre' }}
+                }
+              </span>
+            </button>
+          }
+        </div>
+      }
+
+      <form class="mfx-form" [formGroup]="inviteForm" (ngSubmit)="invite()">
+        <label class="mfx-form__field">
+          Correo
+          <input type="email" formControlName="email" placeholder="persona@correo.com" />
+          @if (inviteForm.controls.email.invalid && inviteForm.controls.email.touched) {
+            <span class="mfx-form__error" role="alert">
+              @if (inviteForm.controls.email.hasError('required')) {
+                El correo es obligatorio.
+              } @else if (inviteForm.controls.email.hasError('email')) {
+                Ingresa un correo válido.
+              } @else if (inviteForm.controls.email.hasError('selfInvite')) {
+                No puedes invitarte a ti mismo.
+              } @else if (inviteForm.controls.email.hasError('alreadyMember')) {
+                Ya es miembro de este grupo.
+              }
+            </span>
+          }
+        </label>
+
+        @if (inviteError()) {
+          <p class="mfx-form__error" role="alert">{{ inviteError() }}</p>
         }
-      </label>
 
-      @if (inviteError()) {
-        <p class="mfx-form__error" role="alert">{{ inviteError() }}</p>
-      }
-      @if (inviteSuccess()) {
-        <p class="mfx-form__success">¡Invitación enviada!</p>
-      }
-
-      <div class="mfx-form__actions">
-        <button type="submit" class="mfx-btn-primary" [disabled]="inviting() || inviteForm.invalid">
-          {{ inviting() ? 'Invitando…' : 'Invitar' }}
-        </button>
-      </div>
-    </form>
+        <div class="mfx-form__actions">
+          <button type="submit" class="mfx-btn-primary" [disabled]="inviting() || inviteForm.invalid">
+            {{ inviting() ? 'Invitando…' : 'Invitar' }}
+          </button>
+        </div>
+      </form>
+    }
 
     @if (canManageGroup()) {
       <div class="mfx-section-header">

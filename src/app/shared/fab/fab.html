@@ -2,10 +2,6 @@
   <div class="mfx-fab__backdrop" [@fadeInOut] (click)="close()"></div>
 }
 
-@if (message(); as text) {
-  <p class="mfx-fab__message" [@fadeInOut]>{{ text }}</p>
-}
-
 <div class="mfx-fab">
   @if (open()) {
     <div class="mfx-fab__options">

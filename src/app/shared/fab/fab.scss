@@ -63,18 +63,3 @@
   z-index: 20;
 }
 
-.mfx-fab__message {
-  position: fixed;
-  left: 50%;
-  bottom: calc(var(--mfx-tab-bar-height) + 5.5rem);
-  transform: translateX(-50%);
-  margin: 0;
-  background: var(--surface);
-  color: var(--text);
-  padding: 0.625rem 1rem;
-  border-radius: 999px;
-  font-size: 0.875rem;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-  z-index: 30;
-  white-space: nowrap;
-}

@@ -126,6 +126,18 @@ body {
   }
 }
 
+.mfx-form__field--checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+
+  input[type='checkbox'] {
+    width: 1.125rem;
+    height: 1.125rem;
+    accent-color: var(--primary);
+  }
+}
+
 .mfx-form__error {
   margin: 0;
   color: var(--danger);

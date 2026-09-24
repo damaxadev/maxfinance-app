@@ -19,6 +19,12 @@ import { GroupFormState } from '../core/group-form-state/group-form-state';
 import { GroupForm } from '../features/groups/group-form/group-form';
 import { GroupDetailState } from '../core/group-detail-state/group-detail-state';
 import { GroupDetail } from '../features/groups/group-detail/group-detail';
+import { GroupActivityFullState } from '../core/group-activity-full-state/group-activity-full-state';
+import { GroupActivityFull } from '../features/groups/group-activity-full/group-activity-full';
+import { SharedExpenseFormState } from '../core/shared-expense-form-state/shared-expense-form-state';
+import { SharedExpenseForm } from '../features/groups/shared-expense-form/shared-expense-form';
+import { SettlementFormState } from '../core/settlement-form-state/settlement-form-state';
+import { SettlementForm } from '../features/groups/settlement-form/settlement-form';
 
 @Component({
   selector: 'mfx-shell',
@@ -31,6 +37,9 @@ import { GroupDetail } from '../features/groups/group-detail/group-detail';
     CategoryForm,
     GroupForm,
     GroupDetail,
+    GroupActivityFull,
+    SharedExpenseForm,
+    SettlementForm,
     Home,
     Movements,
     Groups,
@@ -48,6 +57,9 @@ export class Shell implements AfterViewInit, OnDestroy {
   readonly categoryFormState = inject(CategoryFormState);
   readonly groupFormState = inject(GroupFormState);
   readonly groupDetailState = inject(GroupDetailState);
+  readonly groupActivityFullState = inject(GroupActivityFullState);
+  readonly sharedExpenseFormState = inject(SharedExpenseFormState);
+  readonly settlementFormState = inject(SettlementFormState);
 
   readonly activeIndex = signal(0);
 

@@ -1,12 +1,12 @@
 import { TestBed } from '@angular/core/testing';
-import { Firestore } from '@angular/fire/firestore';
+import { Firestore, collectionData, getCountFromServer } from '@angular/fire/firestore';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
-import { of } from 'rxjs';
+import { firstValueFrom, of } from 'rxjs';
 import { vi } from 'vitest';
 
 import { Auth } from '../auth/auth';
 import { MovementsService } from './movements';
-import type { PersonalMovement } from '../../models/movement.model';
+import type { MovementSplit, PersonalMovement } from '../../models/movement.model';
 
 const { mockBatch, mockCommit } = vi.hoisted(() => {
   const commit = vi.fn().mockResolvedValue(undefined);
@@ -21,15 +21,28 @@ const { mockBatch, mockCommit } = vi.hoisted(() => {
   };
 });
 
+let autoDocId = 0;
+
 vi.mock('@angular/fire/firestore', () => ({
   Firestore: class {},
   collection: vi.fn((_fs, path) => ({ path })),
   collectionData: vi.fn(() => of([])),
-  doc: vi.fn((_fs, path, id) => ({ path, id })),
+  // doc(firestore, path, id) referencia un id explícito; doc(collectionRef)
+  // (un solo argumento) autogenera uno — como lo hace MovementsService al
+  // crear un movement nuevo (personal o compartido).
+  doc: vi.fn((...args: unknown[]) => {
+    if (args.length === 1) {
+      const collectionRef = args[0] as { path: string };
+      return { path: collectionRef.path, id: `auto-id-${++autoDocId}` };
+    }
+    const [, path, id] = args as [unknown, string, string];
+    return { path, id };
+  }),
   query: vi.fn((...args: unknown[]) => args),
   where: vi.fn((field: string, op: string, value: unknown) => ({ field, op, value })),
   increment: vi.fn((n: number) => ({ __op: 'increment', value: n })),
   writeBatch: vi.fn(() => mockBatch),
+  getCountFromServer: vi.fn(),
   Timestamp: { fromDate: vi.fn((d: Date) => ({ __ts: d.getTime() })) },
 }));
 
@@ -42,6 +55,8 @@ describe('MovementsService', () => {
     mockBatch.update.mockClear();
     mockBatch.delete.mockClear();
     mockCommit.mockClear();
+    vi.mocked(collectionData).mockClear().mockReturnValue(of([]));
+    vi.mocked(getCountFromServer).mockClear();
     vi.mocked(FirebaseAuthentication.getCurrentUser).mockReset().mockResolvedValue({ user: null });
     vi.mocked(FirebaseAuthentication.addListener).mockReset().mockResolvedValue({ remove: vi.fn() });
 
@@ -171,5 +186,96 @@ describe('MovementsService', () => {
     expect(mockBatch.update).toHaveBeenCalledWith(expect.anything(), {
       balance: { __op: 'increment', value: -500 },
     });
+  });
+
+  it('groupMovements$(): queries by groupId and returns the group shared movements', async () => {
+    const fakeSharedMovement = { id: 'sm1', groupId: 'group1', paidBy: 'u1', amount: 100 };
+    vi.mocked(collectionData).mockReturnValueOnce(of([fakeSharedMovement]));
+
+    const result = await firstValueFrom(service.groupMovements$('group1'));
+
+    expect(result).toEqual([fakeSharedMovement]);
+  });
+
+  it('createShared(): adds the movement and decrements the payer account when accountId is provided', async () => {
+    const splits: MovementSplit[] = [
+      { uid: 'u1', amount: 50, settled: false },
+      { uid: 'u2', amount: 50, settled: false },
+    ];
+
+    await service.createShared({
+      groupId: 'group1',
+      paidBy: 'u1',
+      amount: 100,
+      accountId: 'acc1',
+      categoryId: 'cat1',
+      splitType: 'equal',
+      splits,
+      date: new Date('2026-01-15'),
+      note: 'Cena',
+    });
+
+    expect(mockBatch.set).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        uid: 'u1',
+        type: 'expense',
+        amount: 100,
+        groupId: 'group1',
+        paidBy: 'u1',
+        splitType: 'equal',
+        splits,
+        accountId: 'acc1',
+      })
+    );
+    expect(mockBatch.update).toHaveBeenCalledWith(expect.objectContaining({ path: 'accounts', id: 'acc1' }), {
+      balance: { __op: 'increment', value: -100 },
+    });
+    expect(mockCommit).toHaveBeenCalled();
+  });
+
+  it('createShared(): does not touch any account when accountId is null (payer is someone else)', async () => {
+    const splits: MovementSplit[] = [{ uid: 'u2', amount: 100, settled: false }];
+
+    await service.createShared({
+      groupId: 'group1',
+      paidBy: 'u2',
+      amount: 100,
+      accountId: null,
+      categoryId: 'cat1',
+      splitType: 'equal',
+      splits,
+      date: new Date('2026-01-15'),
+      note: '',
+    });
+
+    expect(mockBatch.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ accountId: null }));
+    expect(mockBatch.update).not.toHaveBeenCalled();
+    expect(mockCommit).toHaveBeenCalled();
+  });
+
+  it('sharedMovementsForGroups$(): runs one query per group and flattens the results', async () => {
+    const inGroup1 = { id: 'sm1', groupId: 'group1', uid: 'u1', amount: 30 };
+    const inGroup2 = { id: 'sm2', groupId: 'group2', uid: 'u1', amount: 40 };
+    vi.mocked(collectionData).mockReturnValueOnce(of([inGroup1])).mockReturnValueOnce(of([inGroup2]));
+
+    const result = await firstValueFrom(service.sharedMovementsForGroups$(['group1', 'group2']));
+
+    expect(result).toEqual([inGroup1, inGroup2]);
+  });
+
+  it('sharedMovementsForGroups$(): returns an empty array without querying when there are no groups', async () => {
+    const result = await firstValueFrom(service.sharedMovementsForGroups$([]));
+
+    expect(result).toEqual([]);
+    expect(collectionData).not.toHaveBeenCalled();
+  });
+
+  it('countGroupMovements(): reads the aggregation count for the group', async () => {
+    vi.mocked(getCountFromServer).mockResolvedValueOnce({ data: () => ({ count: 7 }) } as never);
+
+    const count = await service.countGroupMovements('group1');
+
+    expect(count).toBe(7);
   });
 });

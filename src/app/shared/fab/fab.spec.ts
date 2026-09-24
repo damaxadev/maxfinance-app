@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Fab } from './fab';
 
@@ -19,7 +19,6 @@ describe('Fab', () => {
 
   beforeEach(async () => {
     mockImpact.mockClear();
-    vi.useFakeTimers();
 
     await TestBed.configureTestingModule({
       imports: [Fab],
@@ -29,10 +28,6 @@ describe('Fab', () => {
     fixture = TestBed.createComponent(Fab);
     component = fixture.componentInstance;
     fixture.detectChanges();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
   });
 
   it('should create', () => {
@@ -74,19 +69,7 @@ describe('Fab', () => {
     expect(mockImpact).not.toHaveBeenCalled();
   });
 
-  it('selecting the placeholder option closes the menu and shows a temporary message', () => {
-    component.toggle();
-
-    component.selectOption(component.options[2]);
-
-    expect(component.open()).toBe(false);
-    expect(component.message()).toBe('Próximamente: Agregar gasto compartido');
-
-    vi.advanceTimersByTime(2000);
-    expect(component.message()).toBeNull();
-  });
-
-  it('selecting "Agregar movimiento" emits movementRequested instead of the placeholder', () => {
+  it('selecting "Agregar movimiento" emits movementRequested', () => {
     component.toggle();
     const emitted: void[] = [];
     component.movementRequested.subscribe(() => emitted.push(undefined));
@@ -94,11 +77,10 @@ describe('Fab', () => {
     component.selectOption(component.options[0]);
 
     expect(component.open()).toBe(false);
-    expect(component.message()).toBeNull();
     expect(emitted.length).toBe(1);
   });
 
-  it('selecting "Nuevo grupo" emits groupRequested instead of the placeholder', () => {
+  it('selecting "Nuevo grupo" emits groupRequested', () => {
     component.toggle();
     const emitted: void[] = [];
     component.groupRequested.subscribe(() => emitted.push(undefined));
@@ -106,7 +88,17 @@ describe('Fab', () => {
     component.selectOption(component.options[1]);
 
     expect(component.open()).toBe(false);
-    expect(component.message()).toBeNull();
+    expect(emitted.length).toBe(1);
+  });
+
+  it('selecting "Agregar gasto compartido" emits sharedExpenseRequested', () => {
+    component.toggle();
+    const emitted: void[] = [];
+    component.sharedExpenseRequested.subscribe(() => emitted.push(undefined));
+
+    component.selectOption(component.options[2]);
+
+    expect(component.open()).toBe(false);
     expect(emitted.length).toBe(1);
   });
 

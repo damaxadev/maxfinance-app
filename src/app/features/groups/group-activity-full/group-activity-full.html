@@ -1,0 +1,7 @@
+@if (membersLoading()) {
+  <p>Cargando…</p>
+} @else if (membersError()) {
+  <p class="mfx-form__error" role="alert">{{ membersError() }}</p>
+} @else {
+  <mfx-group-activity [groupId]="groupId()" [members]="members()" [limit]="null" />
+}
