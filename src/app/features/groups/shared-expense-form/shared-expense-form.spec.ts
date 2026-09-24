@@ -55,8 +55,53 @@ describe('SharedExpenseForm', () => {
     fixture.detectChanges();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('submits with the current time of day, not midnight, when the date is left unchanged', async () => {
+    // El campo date ya trae "hoy" por defecto desde la construcción (antes
+    // de fijar el reloj falso) — se deriva el año/mes/día esperado de ese
+    // mismo valor en vez de asumir uno fijo, para no acoplar el test al
+    // momento real en que corre.
+    const [year, month, day] = component.form.controls.date.value.split('-').map(Number);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(year, month - 1, day, 14, 30, 15));
+    component.form.controls.amount.setValue(100);
+    component.form.controls.accountId.setValue('acc1');
+    component.form.controls.categoryId.setValue('cat-expense');
+
+    await component.submit();
+    vi.useRealTimers();
+
+    const [value] = createShared.mock.calls[0];
+    expect(value.date.getFullYear()).toBe(year);
+    expect(value.date.getMonth()).toBe(month - 1);
+    expect(value.date.getDate()).toBe(day);
+    expect(value.date.getHours()).toBe(14);
+    expect(value.date.getMinutes()).toBe(30);
+    expect(value.date.getSeconds()).toBe(15);
+  });
+
+  it('keeps the current time of day even when the date is changed to a past date', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 15, 9, 5, 0));
+    component.form.controls.amount.setValue(100);
+    component.form.controls.accountId.setValue('acc1');
+    component.form.controls.categoryId.setValue('cat-expense');
+    component.form.controls.date.setValue('2026-03-01');
+
+    await component.submit();
+    vi.useRealTimers();
+
+    const [value] = createShared.mock.calls[0];
+    expect(value.date.getDate()).toBe(1);
+    expect(value.date.getHours()).toBe(9);
+    expect(value.date.getMinutes()).toBe(5);
   });
 
   it('loads the members of the active group and defaults paidBy to the current user', () => {

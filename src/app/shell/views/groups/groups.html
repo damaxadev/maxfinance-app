@@ -7,14 +7,21 @@
   </div>
 
   @if (groups().length > 1) {
-    <label class="mfx-form__field">
-      Grupo activo
-      <select [value]="activeGroup.groupId()" (change)="activeGroup.select($any($event.target).value)">
-        @for (group of groups(); track group.id) {
-          <option [value]="group.id">{{ group.name }}</option>
-        }
-      </select>
-    </label>
+    <div class="mfx-groups__pills">
+      @for (group of groups(); track group.id) {
+        <button
+          type="button"
+          class="mfx-groups__pill"
+          [class.mfx-groups__pill--active]="activeGroup.groupId() === group.id"
+          (click)="activeGroup.select(group.id)"
+        >
+          @if (groupMembers(group.id)[0]; as first) {
+            <mfx-avatar [photoUrl]="first.photoURL" [displayName]="first.displayName" [size]="18" />
+          }
+          {{ group.name }}
+        </button>
+      }
+    </div>
   }
 
   @if (groups().length === 0) {
@@ -25,8 +32,21 @@
     @for (group of groups(); track group.id; let i = $index) {
       <mfx-card [index]="i" (click)="openDetail(group)">
         <div class="mfx-groups__item">
-          <span>{{ group.name }}</span>
-          <span class="mfx-groups__count">{{ group.members.length }} miembro{{ group.members.length === 1 ? '' : 's' }}</span>
+          <span class="mfx-groups__name">{{ group.name }}</span>
+
+          <div class="mfx-groups__item-actions">
+            <div class="mfx-groups__avatars">
+              @for (member of groupMembers(group.id).slice(0, maxStackedAvatars); track member.uid) {
+                <mfx-avatar [photoUrl]="member.photoURL" [displayName]="member.displayName" [size]="28" />
+              }
+              @if (groupMembers(group.id).length > maxStackedAvatars) {
+                <span class="mfx-groups__avatar-more">+{{ groupMembers(group.id).length - maxStackedAvatars }}</span>
+              }
+            </div>
+            <button type="button" class="mfx-groups__add-expense" (click)="addExpense(group, $event)">
+              + Agregar gasto
+            </button>
+          </div>
         </div>
       </mfx-card>
     }

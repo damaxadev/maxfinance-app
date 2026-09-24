@@ -1,6 +1,9 @@
 @if (group(); as g) {
   <div class="mfx-group-detail">
-    <h3>{{ g.name }}</h3>
+    <div class="mfx-section-header">
+      <h3>{{ g.name }}</h3>
+      <button type="button" class="mfx-section-add" (click)="addExpense()">+ Agregar gasto</button>
+    </div>
 
     <div class="mfx-section-header">
       <h4>Miembros</h4>

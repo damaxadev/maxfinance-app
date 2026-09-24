@@ -7,10 +7,11 @@ import { Auth } from '../../../core/auth/auth';
 import { Celebration } from '../../../core/celebration/celebration';
 import type { SettlementContext } from '../../../core/settlement-form-state/settlement-form-state';
 import { SettlementsService } from '../../../core/settlements/settlements';
+import { Checkbox } from '../../../shared/checkbox/checkbox';
 
 @Component({
   selector: 'mfx-settlement-form',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, Checkbox],
   templateUrl: './settlement-form.html',
   styleUrl: './settlement-form.scss',
 })

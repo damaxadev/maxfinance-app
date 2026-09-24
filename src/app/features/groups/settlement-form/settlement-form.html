@@ -22,10 +22,7 @@
     <textarea formControlName="note" placeholder="Opcional"></textarea>
   </label>
 
-  <label class="mfx-form__field mfx-form__field--checkbox">
-    <input type="checkbox" formControlName="registerPersonalMovement" />
-    Registrar también como movimiento personal
-  </label>
+  <mfx-checkbox formControlName="registerPersonalMovement">Registrar también como movimiento personal</mfx-checkbox>
 
   @if (form.controls.registerPersonalMovement.value) {
     <label class="mfx-form__field">

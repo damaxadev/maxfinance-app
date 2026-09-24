@@ -30,8 +30,30 @@
 
 .mfx-movements__item-info {
   display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.mfx-movements__icon-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: var(--bg);
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.mfx-movements__item-text {
+  display: flex;
   flex-direction: column;
   gap: 0.125rem;
+}
+
+.mfx-movements__category-name {
+  font-weight: 600;
 }
 
 .mfx-movements__item-account {

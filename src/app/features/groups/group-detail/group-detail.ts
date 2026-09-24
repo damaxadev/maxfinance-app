@@ -5,6 +5,7 @@ import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 
 import { Auth } from '../../../core/auth/auth';
 import { GroupsService, type GroupMemberProfile } from '../../../core/groups/groups';
+import { SharedExpenseFormState } from '../../../core/shared-expense-form-state/shared-expense-form-state';
 import { Avatar } from '../../../shared/avatar/avatar';
 import { GroupActivity } from '../group-activity/group-activity';
 import { GroupBalance } from '../group-balance/group-balance';
@@ -21,6 +22,7 @@ export class GroupDetail {
   private readonly groupsService = inject(GroupsService);
   private readonly auth = inject(Auth);
   private readonly fb = inject(FormBuilder);
+  private readonly sharedExpenseFormState = inject(SharedExpenseFormState);
 
   readonly groupId = input.required<string>();
   readonly left = output<void>();
@@ -234,6 +236,10 @@ export class GroupDetail {
 
   toggleInviteSection(): void {
     this.inviteSectionExpanded.update((expanded) => !expanded);
+  }
+
+  addExpense(): void {
+    this.sharedExpenseFormState.openCreate(this.groupId());
   }
 
   private markJustInvited(uid: string): void {

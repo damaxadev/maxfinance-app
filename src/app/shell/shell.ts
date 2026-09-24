@@ -1,5 +1,6 @@
 import { Component, CUSTOM_ELEMENTS_SCHEMA, ElementRef, OnDestroy, AfterViewInit, inject, viewChild, signal } from '@angular/core';
 import type { SwiperContainer } from 'swiper/element';
+import type { Swiper } from 'swiper';
 
 import { TabBar } from './tab-bar/tab-bar';
 import { Fab } from '../shared/fab/fab';
@@ -63,19 +64,28 @@ export class Shell implements AfterViewInit, OnDestroy {
 
   readonly activeIndex = signal(0);
 
-  private readonly handleSlideChange = (): void => {
-    const swiper = this.swiperEl().nativeElement.swiper;
-    if (swiper) {
+  // Se suscribe directo a la instancia de Swiper (swiper.on/off), no al
+  // CustomEvent 'slidechange' que <swiper-container> reenvía desde su shadow
+  // root — un intermediario de más que dependía de que zone.js parcheara
+  // ese addEventListener para disparar change detection. Los signals ya
+  // notifican por sí mismos al escribir, sin depender de zone.js, así que
+  // suscribirse a la fuente (el propio Swiper) es más directo y más robusto.
+  private readonly handleSlideChange = (swiper: Swiper): void => {
+    // this.activeIndex() ya puede coincidir si el cambio vino de un tab
+    // (onTabSelected ya lo actualizó antes de llamar slideTo) — comparar
+    // evita un set() redundante, no por loop (acá nunca se llama a
+    // slideTo), sino para no re-emitir un valor que ya es el mismo.
+    if (this.activeIndex() !== swiper.activeIndex) {
       this.activeIndex.set(swiper.activeIndex);
     }
   };
 
   ngAfterViewInit(): void {
-    this.swiperEl().nativeElement.addEventListener('slidechange', this.handleSlideChange);
+    this.swiperEl().nativeElement.swiper?.on('slideChange', this.handleSlideChange);
   }
 
   ngOnDestroy(): void {
-    this.swiperEl().nativeElement.removeEventListener('slidechange', this.handleSlideChange);
+    this.swiperEl().nativeElement.swiper?.off('slideChange', this.handleSlideChange);
   }
 
   onTabSelected(index: number): void {

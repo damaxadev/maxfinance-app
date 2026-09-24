@@ -56,6 +56,10 @@ describe('MovementForm', () => {
     fixture.detectChanges();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('should create', () => {
     expect(component).toBeTruthy();
   });
@@ -165,7 +169,9 @@ describe('MovementForm', () => {
     expect(component.form.controls.categoryId.value).toBe('cat-expense');
   });
 
-  it('creates a movement with the date parsed as local midnight', async () => {
+  it('creates a movement with the selected date and the current time of day (not midnight)', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 10, 14, 30, 15));
     const emitted: void[] = [];
     component.saved.subscribe(() => emitted.push(undefined));
 
@@ -179,6 +185,7 @@ describe('MovementForm', () => {
     });
 
     await component.submit();
+    vi.useRealTimers();
 
     expect(create).toHaveBeenCalledTimes(1);
     const [value] = create.mock.calls[0];
@@ -187,7 +194,32 @@ describe('MovementForm', () => {
     expect(value.date.getFullYear()).toBe(2026);
     expect(value.date.getMonth()).toBe(2);
     expect(value.date.getDate()).toBe(10);
+    expect(value.date.getHours()).toBe(14);
+    expect(value.date.getMinutes()).toBe(30);
+    expect(value.date.getSeconds()).toBe(15);
     expect(emitted.length).toBe(1);
+  });
+
+  it('keeps the current time of day even when the date is changed to a past date', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 15, 9, 5, 0));
+
+    component.form.setValue({
+      type: 'expense',
+      amount: 20,
+      accountId: 'acc1',
+      categoryId: 'cat-expense',
+      date: '2026-03-01', // fecha pasada, elegida a propósito
+      note: '',
+    });
+
+    await component.submit();
+    vi.useRealTimers();
+
+    const [value] = create.mock.calls[0];
+    expect(value.date.getDate()).toBe(1);
+    expect(value.date.getHours()).toBe(9);
+    expect(value.date.getMinutes()).toBe(5);
   });
 });
 

@@ -15,17 +15,22 @@ describe('SharedExpenseFormState', () => {
   });
 
   it('starts closed', () => {
-    expect(service.open()).toBe(false);
+    expect(service.request()).toBeNull();
   });
 
-  it('opens on openCreate()', () => {
+  it('opens with groupId: null when called without a group (FAB — usa el grupo activo)', () => {
     service.openCreate();
-    expect(service.open()).toBe(true);
+    expect(service.request()).toEqual({ groupId: null });
   });
 
-  it('closes back to false', () => {
-    service.openCreate();
+  it('opens with the given groupId when called from a specific group', () => {
+    service.openCreate('group1');
+    expect(service.request()).toEqual({ groupId: 'group1' });
+  });
+
+  it('closes back to null', () => {
+    service.openCreate('group1');
     service.close();
-    expect(service.open()).toBe(false);
+    expect(service.request()).toBeNull();
   });
 });
