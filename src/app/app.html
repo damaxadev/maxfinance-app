@@ -1,1 +1,5 @@
 <router-outlet />
+
+@if (notificationBannerState.banner(); as banner) {
+  <mfx-toast [title]="banner.title" [body]="banner.body" (dismissed)="notificationBannerState.dismiss()" />
+}

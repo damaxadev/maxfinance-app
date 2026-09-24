@@ -1,11 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { Firestore, updateDoc } from '@angular/fire/firestore';
-import { FirebaseMessaging } from '@capacitor-firebase/messaging';
+import { FirebaseMessaging, Importance } from '@capacitor-firebase/messaging';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
 
 import { Auth } from '../auth/auth';
-import { Notifications } from './notifications';
+import { Notifications, RECURRING_PAYMENTS_CHANNEL_ID } from './notifications';
 
 vi.mock('@angular/fire/firestore', () => ({
   Firestore: class {},
@@ -20,7 +20,10 @@ vi.mock('@capacitor-firebase/messaging', () => ({
     checkPermissions: vi.fn(),
     requestPermissions: vi.fn(),
     getToken: vi.fn(),
+    createChannel: vi.fn().mockResolvedValue(undefined),
+    addListener: vi.fn().mockResolvedValue({ remove: vi.fn() }),
   },
+  Importance: { Min: 1, Low: 2, Default: 3, High: 4, Max: 5 },
 }));
 
 describe('Notifications', () => {
@@ -34,6 +37,8 @@ describe('Notifications', () => {
     vi.mocked(FirebaseMessaging.checkPermissions).mockReset().mockResolvedValue({ receive: 'prompt' });
     vi.mocked(FirebaseMessaging.requestPermissions).mockReset().mockResolvedValue({ receive: 'prompt' });
     vi.mocked(FirebaseMessaging.getToken).mockReset().mockResolvedValue({ token: 'fake-token' });
+    vi.mocked(FirebaseMessaging.createChannel).mockReset().mockResolvedValue(undefined);
+    vi.mocked(FirebaseMessaging.addListener).mockReset().mockResolvedValue({ remove: vi.fn() });
 
     TestBed.configureTestingModule({
       providers: [
@@ -134,6 +139,52 @@ describe('Notifications', () => {
       const result = await service.enable();
 
       expect(result).toBe('granted');
+    });
+  });
+
+  describe('ensureNotificationChannel()', () => {
+    it('creates the fixed recurring-payments channel', async () => {
+      await service.ensureNotificationChannel();
+
+      expect(FirebaseMessaging.createChannel).toHaveBeenCalledWith(
+        expect.objectContaining({ id: RECURRING_PAYMENTS_CHANNEL_ID, importance: Importance.Default })
+      );
+    });
+
+    it('never throws even if the platform does not support channels (e.g. web)', async () => {
+      vi.mocked(FirebaseMessaging.createChannel).mockRejectedValue(new Error('not supported on web'));
+
+      await expect(service.ensureNotificationChannel()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('listenForForegroundMessages()', () => {
+    it('registers a notificationReceived listener', () => {
+      const onMessage = vi.fn();
+
+      service.listenForForegroundMessages(onMessage);
+
+      expect(FirebaseMessaging.addListener).toHaveBeenCalledWith('notificationReceived', expect.any(Function));
+    });
+
+    it('forwards the title/body from the event to the callback', () => {
+      const onMessage = vi.fn();
+      service.listenForForegroundMessages(onMessage);
+      const handler = vi.mocked(FirebaseMessaging.addListener).mock.calls[0][1] as (event: unknown) => void;
+
+      handler({ notification: { title: 'Pago recurrente procesado', body: 'Netflix: $70.000' } });
+
+      expect(onMessage).toHaveBeenCalledWith({ title: 'Pago recurrente procesado', body: 'Netflix: $70.000' });
+    });
+
+    it('falls back to sensible defaults when title/body are missing', () => {
+      const onMessage = vi.fn();
+      service.listenForForegroundMessages(onMessage);
+      const handler = vi.mocked(FirebaseMessaging.addListener).mock.calls[0][1] as (event: unknown) => void;
+
+      handler({ notification: {} });
+
+      expect(onMessage).toHaveBeenCalledWith({ title: 'MaxFinance', body: '' });
     });
   });
 });

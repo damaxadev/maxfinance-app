@@ -1,0 +1,8 @@
+<div class="mfx-toast__content">
+  <span class="mfx-toast__icon">🔔</span>
+  <div class="mfx-toast__text">
+    <strong>{{ title() }}</strong>
+    <span>{{ body() }}</span>
+  </div>
+</div>
+<button type="button" class="mfx-toast__close" (click)="dismissed.emit()" aria-label="Cerrar">×</button>
