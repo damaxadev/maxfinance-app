@@ -8,6 +8,7 @@ import { Card } from '../../../shared/card/card';
 import { AnimatedNumber } from '../../../shared/animated-number/animated-number';
 import { MfxCurrencyInputDirective } from '../../../shared/currency/currency-input.directive';
 import { ProgressRing } from '../../../shared/progress-ring/progress-ring';
+import { ThemeToggle } from '../../../shared/theme-toggle/theme-toggle';
 import { Auth } from '../../../core/auth/auth';
 import {
   calculateBudgetProgress,
@@ -28,7 +29,7 @@ function toMonthKey(date: Date): string {
 
 @Component({
   selector: 'mfx-settings',
-  imports: [Card, RouterLink, AnimatedNumber, ProgressRing, ReactiveFormsModule, MfxCurrencyInputDirective],
+  imports: [Card, RouterLink, AnimatedNumber, ProgressRing, ReactiveFormsModule, MfxCurrencyInputDirective, ThemeToggle],
   templateUrl: './settings.html',
   styleUrl: './settings.scss',
 })

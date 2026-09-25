@@ -1,3 +1,4 @@
+import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
@@ -11,6 +12,7 @@ import { Categories } from '../../../core/categories/categories';
 import { CategoryFormState } from '../../../core/category-form-state/category-form-state';
 import { GroupsService } from '../../../core/groups/groups';
 import { MovementsService } from '../../../core/movements/movements';
+import { ThemeService } from '../../../core/theme/theme';
 
 const fakeCategories = [
   { id: 'cat-food', uid: null, name: 'Comida', icon: '🍔', type: 'expense' as const },
@@ -33,6 +35,10 @@ function configure(opts: { budgets?: unknown[]; movements?: unknown[]; setLimit?
       { provide: Categories, useValue: { categories$: of(fakeCategories) } },
       { provide: GroupsService, useValue: { groups$: of([]) } },
       { provide: MovementsService, useValue: { combinedMovements$: () => of(opts.movements ?? []) } },
+      // ThemeToggle (renderizado dentro de Settings) inyecta ThemeService
+      // directamente — se stubea acá para no depender de @capacitor/preferences
+      // real; su propio comportamiento se prueba en theme.spec.ts.
+      { provide: ThemeService, useValue: { theme: signal('dark').asReadonly(), toggle: vi.fn().mockResolvedValue(undefined) } },
       {
         provide: Budgets,
         useValue: {
@@ -63,6 +69,11 @@ describe('Settings', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('renders the appearance section with the theme toggle', () => {
+    expect(fixture.nativeElement.textContent).toContain('Apariencia');
+    expect(fixture.nativeElement.querySelector('mfx-theme-toggle')).toBeTruthy();
   });
 
   it('only shows custom categories (uid != null), not the base/seed ones', () => {

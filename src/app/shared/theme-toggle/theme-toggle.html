@@ -1,0 +1,14 @@
+<button
+  type="button"
+  role="switch"
+  class="mfx-theme-toggle"
+  [class.mfx-theme-toggle--light]="theme() === 'light'"
+  [attr.aria-checked]="theme() === 'light'"
+  aria-label="Cambiar entre modo oscuro y modo claro"
+  (click)="toggle()"
+>
+  <span class="mfx-theme-toggle__track">
+    <span class="mfx-theme-toggle__thumb">{{ theme() === 'light' ? '☀️' : '🌙' }}</span>
+  </span>
+  <span class="mfx-theme-toggle__label">{{ theme() === 'light' ? 'Modo claro' : 'Modo oscuro' }}</span>
+</button>

@@ -78,9 +78,14 @@ describe('Recurring', () => {
   it('checking the toggle calls enable() and disables it once granted', async () => {
     component.notificationsControl.setValue(true);
     await flushMicrotasks();
+    fixture.detectChanges();
 
     expect(component.notificationsControl.value).toBe(true);
     expect(component.notificationsControl.disabled).toBe(true);
+
+    const checkbox = fixture.nativeElement.querySelector('.mfx-checkbox') as HTMLButtonElement;
+    expect(checkbox.getAttribute('aria-checked')).toBe('true');
+    expect(checkbox.disabled).toBe(true);
   });
 
   it('reverts the toggle and shows a message when the permission is denied', async () => {
@@ -143,5 +148,33 @@ describe('Recurring when notifications are already granted', () => {
   it('shows the toggle already checked and disabled', () => {
     expect(component.notificationsControl.value).toBe(true);
     expect(component.notificationsControl.disabled).toBe(true);
+
+    // No solo el FormControl — el checkbox RENDERIZADO tiene que reflejarlo
+    // también. Este es exactamente el chequeo que faltaba y dejó pasar el
+    // bug de Fase 8 (el control se actualizaba, el checkbox en pantalla no).
+    const checkbox = fixture.nativeElement.querySelector('.mfx-checkbox') as HTMLButtonElement;
+    expect(checkbox.getAttribute('aria-checked')).toBe('true');
+    expect(checkbox.disabled).toBe(true);
+  });
+
+  it('reflects the granted permission in the rendered checkbox even without an explicit detectChanges() nudge', async () => {
+    // Regresión específica para el fix de Fase 8: esta app corre sin
+    // zone.js (zoneless) — checkStatus() resuelve desde una promesa suelta,
+    // ajena a cualquier evento de plantilla, así que sin el
+    // changeDetectorRef.markForCheck() en el constructor de Recurring, el
+    // signal del checkbox se actualiza pero la vista nunca se repinta. Por
+    // eso este test evita a propósito llamar fixture.detectChanges() — si
+    // alguien quita ese markForCheck(), este test es el que lo atrapa.
+    TestBed.resetTestingModule();
+    await configure({ checkStatus: vi.fn().mockResolvedValue('granted') });
+
+    const freshFixture = TestBed.createComponent(Recurring);
+    freshFixture.autoDetectChanges(true);
+    await freshFixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const checkbox = freshFixture.nativeElement.querySelector('.mfx-checkbox') as HTMLButtonElement;
+    expect(checkbox.getAttribute('aria-checked')).toBe('true');
+    expect(checkbox.disabled).toBe(true);
   });
 });

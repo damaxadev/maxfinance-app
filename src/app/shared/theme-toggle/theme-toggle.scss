@@ -1,0 +1,60 @@
+:host {
+  display: inline-flex;
+}
+
+.mfx-theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.875rem;
+  color: var(--text);
+}
+
+.mfx-theme-toggle__track {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 3.25rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 0 0.15rem;
+  background: var(--bg);
+  // color-mix con --text (no un rgba fijo de blanco) para que el borde se
+  // note tanto en oscuro (--text claro) como en claro (--text oscuro) —
+  // ver DESIGN.md, "Modo claro": los tokens cambian de valor, no de forma
+  // de referenciarlos.
+  border: 1px solid color-mix(in srgb, var(--text) 20%, transparent);
+  transition: background 200ms ease-out, border-color 200ms ease-out;
+}
+
+.mfx-theme-toggle__thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 50%;
+  background: var(--surface);
+  font-size: 0.75rem;
+  line-height: 1;
+  transform: translateX(0);
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), background 200ms ease-out;
+}
+
+.mfx-theme-toggle--light {
+  .mfx-theme-toggle__track {
+    background: var(--primary);
+    border-color: var(--primary);
+  }
+
+  .mfx-theme-toggle__thumb {
+    transform: translateX(1.5rem);
+    background: var(--bg);
+  }
+}

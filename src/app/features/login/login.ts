@@ -3,10 +3,11 @@ import { Router } from '@angular/router';
 
 import { Auth } from '../../core/auth/auth';
 import { Card } from '../../shared/card/card';
+import { ThemeToggle } from '../../shared/theme-toggle/theme-toggle';
 
 @Component({
   selector: 'mfx-login',
-  imports: [Card],
+  imports: [Card, ThemeToggle],
   templateUrl: './login.html',
   styleUrl: './login.scss',
 })

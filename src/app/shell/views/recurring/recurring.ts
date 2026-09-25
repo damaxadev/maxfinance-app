@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { ChangeDetectorRef, Component, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 
@@ -18,6 +18,7 @@ import { RecurringPayments, type PersonalRecurringPaymentWithId } from '../../..
 export class Recurring {
   private readonly recurringPaymentsService = inject(RecurringPayments);
   private readonly notificationsService = inject(Notifications);
+  private readonly changeDetectorRef = inject(ChangeDetectorRef);
   readonly recurringPaymentFormState = inject(RecurringPaymentFormState);
 
   readonly recurringPayments = toSignal(this.recurringPaymentsService.personalRecurringPayments$, { initialValue: [] });
@@ -37,7 +38,15 @@ export class Recurring {
           this.notificationsControl.disable({ emitEvent: false });
         }
       })
-      .catch((error) => console.error('Error al consultar el estado de notificaciones', error));
+      .catch((error) => console.error('Error al consultar el estado de notificaciones', error))
+      // Esta app corre sin zone.js (zoneless) — un signal que cambia desde
+      // una promesa "suelta" (no un evento de plantilla, no algo trackeado
+      // por Angular, como una llamada al plugin nativo de notificaciones)
+      // no dispara un re-render automático por sí solo. Sin este
+      // markForCheck(), el checkbox se queda mostrando el valor viejo
+      // (desmarcado) aunque el permiso YA esté concedido — es justo el bug
+      // reportado en Fase 8.
+      .finally(() => this.changeDetectorRef.markForCheck());
 
     this.notificationsControl.valueChanges.subscribe((checked) => {
       if (checked) {
@@ -72,6 +81,11 @@ export class Recurring {
       console.error('Error al activar notificaciones', error);
       this.notificationsControl.setValue(false, { emitEvent: false });
       this.notificationsMessage.set('No pudimos activar las notificaciones. Intenta de nuevo.');
+    } finally {
+      // Mismo motivo que en el constructor: sin esto, el resultado de
+      // enable() (otorgado/denegado/mensaje) no se pinta hasta que algo
+      // más, ajeno a este flujo, dispare un re-render por su cuenta.
+      this.changeDetectorRef.markForCheck();
     }
   }
 }
