@@ -3,6 +3,7 @@ import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore';
 import type { DocumentSnapshot, Firestore } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { defineSecret } from 'firebase-functions/params';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 
 initializeApp();
@@ -10,6 +11,23 @@ initializeApp();
 // Misma región que Firestore (ver firebase.json) — evita latencia entre
 // regiones y mantiene todo el proyecto en un solo lugar.
 const REGION = 'us-east1';
+
+// Mismo secret que ya existe en el Worker (wrangler secret put INTERNAL_KEY,
+// Fase 0) — Cloud Functions no puede leer el secret store de Cloudflare, así
+// que necesita su PROPIA copia del mismo valor en el Secret Manager de
+// Firebase. Configúralo con `firebase functions:secrets:set INTERNAL_KEY`
+// (pega el mismo valor que le diste a wrangler) antes de desplegar.
+const internalKey = defineSecret('INTERNAL_KEY');
+
+// Tiene que coincidir con workerUrl en environment.ts/environment.prod.ts —
+// dos proyectos TS separados, sin import compartido posible (mismo caso que
+// RECURRING_PAYMENTS_CHANNEL_ID/MONTHLY_INSIGHT_CHANNEL_ID más abajo).
+const WORKER_URL = 'https://maxfinance-worker.damaxa134.workers.dev';
+
+// Tienen que coincidir con los mismos ids en
+// src/app/core/notifications/notifications.ts — ver el comentario ahí.
+const RECURRING_PAYMENTS_CHANNEL_ID = 'recurring-payments';
+const MONTHLY_INSIGHT_CHANNEL_ID = 'monthly-insight';
 
 interface UserProfile {
   uid: string;
@@ -219,20 +237,24 @@ function advanceNextDate(current: Date, frequency: string): Date {
   return next;
 }
 
+interface PushNotificationContent {
+  title: string;
+  body: string;
+  channelId: string;
+}
+
 // Envía la notificación a TODOS los dispositivos del usuario (no solo el
 // último) — si algún token falla porque el dispositivo ya no existe
 // ("unregistered"), se elimina de fcmTokens para no seguir intentando en
 // cada corrida. Nunca lanza: un fallo de notificación no debe tumbar el
-// procesamiento del recurrente, que ya quedó guardado en la transacción.
-async function notifyRecurringPaymentProcessed(
-  firestore: Firestore,
-  uid: string,
-  paymentName: string,
-  amount: number
-): Promise<void> {
+// procesamiento del recurrente/insight, que ya quedó guardado antes de
+// llegar acá. Compartida entre processRecurringPayments y
+// generateMonthlyInsights — la única diferencia entre ambos es el
+// título/cuerpo/canal.
+async function sendPushNotification(firestore: Firestore, uid: string, content: PushNotificationContent): Promise<void> {
   const userSnap = await firestore.collection('users').doc(uid).get();
   const tokens = (userSnap.data()?.['fcmTokens'] as string[] | undefined) ?? [];
-  console.log(`[processRecurringPayments] ${uid}: ${tokens.length} token(s) registrados`);
+  console.log(`[sendPushNotification] ${uid}: ${tokens.length} token(s) registrados`);
   if (tokens.length === 0) {
     return;
   }
@@ -246,25 +268,20 @@ async function notifyRecurringPaymentProcessed(
       try {
         const messageId = await messaging.send({
           token,
-          notification: {
-            title: 'Pago recurrente procesado',
-            body: `${paymentName}: $${amount.toLocaleString('es-CO')}`,
-          },
-          // 'recurring-payments' tiene que coincidir con
-          // RECURRING_PAYMENTS_CHANNEL_ID en src/app/core/notifications/
-          // notifications.ts — dos proyectos TS separados, sin un import
-          // compartido posible, así que si se renombra allá hay que
-          // renombrarlo acá también. Sin esto, Android puede enrutar la
-          // notificación a un canal genérico en vez del que se creó.
-          android: { notification: { channelId: 'recurring-payments' } },
+          notification: { title: content.title, body: content.body },
+          // Tiene que coincidir con el id de canal creado del lado del
+          // cliente (ver src/app/core/notifications/notifications.ts) —
+          // sin esto, Android puede enrutar la notificación a un canal
+          // genérico en vez del que se creó.
+          android: { notification: { channelId: content.channelId } },
         });
-        console.log(`[processRecurringPayments] enviado a ${shortToken} — messageId=${messageId}`);
+        console.log(`[sendPushNotification] enviado a ${shortToken} — messageId=${messageId}`);
       } catch (error) {
         if ((error as { code?: string }).code === 'messaging/registration-token-not-registered') {
-          console.log(`[processRecurringPayments] token ${shortToken} ya no existe, se elimina de ${uid}`);
+          console.log(`[sendPushNotification] token ${shortToken} ya no existe, se elimina de ${uid}`);
           deadTokens.push(token);
         } else {
-          console.error(`[processRecurringPayments] error enviando a ${shortToken} (uid ${uid})`, error);
+          console.error(`[sendPushNotification] error enviando a ${shortToken} (uid ${uid})`, error);
         }
       }
     })
@@ -273,6 +290,19 @@ async function notifyRecurringPaymentProcessed(
   if (deadTokens.length > 0) {
     await firestore.collection('users').doc(uid).update({ fcmTokens: FieldValue.arrayRemove(...deadTokens) });
   }
+}
+
+async function notifyRecurringPaymentProcessed(
+  firestore: Firestore,
+  uid: string,
+  paymentName: string,
+  amount: number
+): Promise<void> {
+  await sendPushNotification(firestore, uid, {
+    title: 'Pago recurrente procesado',
+    body: `${paymentName}: $${amount.toLocaleString('es-CO')}`,
+    channelId: RECURRING_PAYMENTS_CHANNEL_ID,
+  });
 }
 
 // Corre una vez al día: por cada recurringPayment personal activo con
@@ -344,6 +374,221 @@ export const processRecurringPayments = onSchedule(
       );
 
       await notifyRecurringPaymentProcessed(firestore, uid, payment['name'] as string, amount);
+    }
+  }
+);
+
+// Bogotá no tiene horario de verano (UTC-5 fijo todo el año) — por eso este
+// truco (correr el reloj el offset y leer los getters UTC como si fueran la
+// hora de pared local) es seguro acá. NO sería seguro en una zona con DST,
+// donde el offset cambia según la fecha.
+const BOGOTA_OFFSET_MS = 5 * 60 * 60 * 1000;
+
+function toBogotaWallClock(date: Date): Date {
+  return new Date(date.getTime() - BOGOTA_OFFSET_MS);
+}
+
+function monthKeyOf(wallClock: Date): string {
+  return `${wallClock.getUTCFullYear()}-${String(wallClock.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+// Medianoche en Bogotá del día 1 de ese mes, como Timestamp real (instante
+// UTC) — para filtrar movements por rango de fecha.
+function bogotaMonthStart(year: number, monthIndex0: number): Timestamp {
+  return Timestamp.fromMillis(Date.UTC(year, monthIndex0, 1) + BOGOTA_OFFSET_MS);
+}
+
+function monthLabelEs(monthKey: string): string {
+  const [year, month] = monthKey.split('-').map(Number);
+  // Día 15 (no el 1) para no arriesgar cruzar de mes por el offset al
+  // formatear — timeZone: 'UTC' porque monthKey ya está en términos de
+  // Bogotá, no hay que volver a desplazar nada acá.
+  const date = new Date(Date.UTC(year, month - 1, 15));
+  return new Intl.DateTimeFormat('es-CO', { month: 'long', timeZone: 'UTC' }).format(date);
+}
+
+interface MonthlyContext {
+  accounts: { name: string; balance: number }[];
+  categoryTotals: { category: string; total: number }[];
+  budget: { limit: number; spent: number; percentage: number } | null;
+}
+
+interface MovementForInsight {
+  type: string;
+  amount: number;
+  categoryId: string;
+  date: Timestamp;
+  paidBy?: string;
+}
+
+// Arma el mismo tipo de contexto que ya usa el análisis bajo demanda
+// (src/app/features/accounts/balances-modal/balances-modal.ts) pero del mes
+// que acaba de cerrar. Devuelve null si el usuario no tuvo ningún movement
+// ese mes (no vale la pena gastar una llamada de IA en alguien inactivo).
+async function buildMonthlyContext(
+  firestore: Firestore,
+  uid: string,
+  rangeStart: Timestamp,
+  rangeEnd: Timestamp,
+  targetMonth: string,
+  baseCategoriesById: Map<string, string>
+): Promise<MonthlyContext | null> {
+  // Un solo query por uid (sin filtrar groupId) trae tanto los movimientos
+  // personales como los compartidos que este usuario registró — el mismo
+  // conjunto que combinedMovements$ arma del lado del cliente (ver
+  // DATABASE.md/movements.ts) — y el mes se filtra en memoria, igual que
+  // hace el cliente (personalMovements$ tampoco filtra por fecha en el
+  // query), para no depender de un índice compuesto (uid, date).
+  const movementsSnap = await firestore.collection('movements').where('uid', '==', uid).get();
+  const monthMovements = movementsSnap.docs
+    .map((doc) => doc.data() as MovementForInsight)
+    .filter((movement) => {
+      const millis = movement.date.toMillis();
+      return millis >= rangeStart.toMillis() && millis < rangeEnd.toMillis();
+    });
+
+  if (monthMovements.length === 0) {
+    return null;
+  }
+
+  // Mismo criterio que sumExpensesByCategory (src/app/core/budget-progress):
+  // solo cuenta lo que el usuario efectivamente pagó, no lo que solo
+  // registró a nombre de otro miembro del grupo.
+  const spentByCategory = new Map<string, number>();
+  for (const movement of monthMovements) {
+    if (movement.type !== 'expense') {
+      continue;
+    }
+    if (movement.paidBy !== undefined && movement.paidBy !== uid) {
+      continue;
+    }
+    spentByCategory.set(movement.categoryId, (spentByCategory.get(movement.categoryId) ?? 0) + movement.amount);
+  }
+
+  const customCategoriesSnap = await firestore.collection('categories').where('uid', '==', uid).get();
+  const categoriesById = new Map(baseCategoriesById);
+  for (const doc of customCategoriesSnap.docs) {
+    categoriesById.set(doc.id, doc.data()['name'] as string);
+  }
+
+  const categoryTotals = [...spentByCategory.entries()].map(([categoryId, total]) => ({
+    category: categoriesById.get(categoryId) ?? 'Categoría eliminada',
+    total,
+  }));
+
+  const accountsSnap = await firestore.collection('accounts').where('uid', '==', uid).get();
+  const accounts = accountsSnap.docs.map((doc) => ({
+    name: doc.data()['name'] as string,
+    balance: doc.data()['balance'] as number,
+  }));
+
+  const budgetsSnap = await firestore.collection('budgets').where('uid', '==', uid).where('month', '==', targetMonth).get();
+  let budget: MonthlyContext['budget'] = null;
+  if (!budgetsSnap.empty) {
+    let totalLimit = 0;
+    let totalSpent = 0;
+    for (const doc of budgetsSnap.docs) {
+      totalLimit += doc.data()['limit'] as number;
+      totalSpent += spentByCategory.get(doc.data()['categoryId'] as string) ?? 0;
+    }
+    budget = { limit: totalLimit, spent: totalSpent, percentage: totalLimit > 0 ? Math.round((totalSpent / totalLimit) * 100) : 0 };
+  }
+
+  return { accounts, categoryTotals, budget };
+}
+
+// Llama al Worker servidor-a-servidor con X-Internal-Key (ver worker/src/
+// index.ts, handleMonthlySummary) — a diferencia de /summary (IA bajo
+// demanda), este endpoint no comparte el límite de 24h de KV: este flujo ya
+// está controlado por correr una sola vez al mes.
+async function requestMonthlySummary(uid: string, context: MonthlyContext, key: string): Promise<string> {
+  const response = await fetch(`${WORKER_URL}/monthly-summary`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'X-Internal-Key': key },
+    body: JSON.stringify({ uid, ...context }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`worker_monthly_summary_http_${response.status}: ${detail}`);
+  }
+
+  const data = (await response.json()) as { summary: string };
+  return data.summary;
+}
+
+async function notifyMonthlyInsightReady(firestore: Firestore, uid: string, targetMonth: string): Promise<void> {
+  await sendPushNotification(firestore, uid, {
+    title: 'Tu resumen mensual ya está listo',
+    body: `Ya está listo tu resumen de ${monthLabelEs(targetMonth)}.`,
+    channelId: MONTHLY_INSIGHT_CHANNEL_ID,
+  });
+}
+
+// Corre una vez al mes, el día 1 a las 7am hora Bogotá — después del
+// schedule diario de recurrentes (6am) para no competir por recursos (ver
+// BACKLOG.md, tarea 56). Por cada usuario con actividad en el mes que
+// acaba de cerrar, genera su insight vía el Worker y lo guarda en
+// monthlyInsights/{uid}_{month} (nunca escrito desde el cliente — ver
+// DATABASE.md), y notifica push. Idempotente por diseño (doc id
+// determinístico + notifiedAt): si la función corre dos veces por error,
+// no vuelve a llamar a la IA ni a duplicar la notificación.
+export const generateMonthlyInsights = onSchedule(
+  { schedule: '1 of month 07:00', timeZone: 'America/Bogota', region: REGION, secrets: [internalKey] },
+  async () => {
+    const firestore = getFirestore();
+
+    const nowWallClock = toBogotaWallClock(new Date());
+    const targetYear = nowWallClock.getUTCFullYear();
+    const targetMonthIndex0 = nowWallClock.getUTCMonth() - 1; // el mes que ya cerró
+    const targetMonth = monthKeyOf(new Date(Date.UTC(targetYear, targetMonthIndex0, 1)));
+    const rangeStart = bogotaMonthStart(targetYear, targetMonthIndex0);
+    const rangeEnd = bogotaMonthStart(targetYear, targetMonthIndex0 + 1);
+
+    const baseCategoriesSnap = await firestore.collection('categories').where('uid', '==', null).get();
+    const baseCategoriesById = new Map(baseCategoriesSnap.docs.map((doc) => [doc.id, doc.data()['name'] as string]));
+
+    const usersSnap = await firestore.collection('users').get();
+    console.log(`[generateMonthlyInsights] ${usersSnap.size} usuario(s) — mes objetivo ${targetMonth}`);
+
+    for (const userDoc of usersSnap.docs) {
+      const uid = userDoc.id;
+      const insightRef = firestore.collection('monthlyInsights').doc(`${uid}_${targetMonth}`);
+      const existing = await insightRef.get();
+
+      if (existing.exists) {
+        if (existing.data()?.['notifiedAt']) {
+          continue; // ya se generó y ya se notificó — nada que hacer
+        }
+        // El texto ya se generó pero la notificación no llegó a
+        // confirmarse (la función corrió dos veces, o falló justo después
+        // de guardar el doc) — no volver a llamar a la IA, solo reintentar
+        // el push.
+        console.log(`[generateMonthlyInsights] ${uid}: insight ya generado, reintentando la notificación`);
+        await notifyMonthlyInsightReady(firestore, uid, targetMonth);
+        await insightRef.update({ notifiedAt: Timestamp.now() });
+        continue;
+      }
+
+      const context = await buildMonthlyContext(firestore, uid, rangeStart, rangeEnd, targetMonth, baseCategoriesById);
+      if (!context) {
+        console.log(`[generateMonthlyInsights] ${uid}: sin actividad en ${targetMonth} — se salta`);
+        continue;
+      }
+
+      let text: string;
+      try {
+        text = await requestMonthlySummary(uid, context, internalKey.value());
+      } catch (error) {
+        console.error(`[generateMonthlyInsights] error generando el insight de ${uid}`, error);
+        continue;
+      }
+
+      await insightRef.set({ uid, month: targetMonth, text, generatedAt: Timestamp.now(), notifiedAt: null });
+      console.log(`[generateMonthlyInsights] ${uid}: insight guardado`);
+
+      await notifyMonthlyInsightReady(firestore, uid, targetMonth);
+      await insightRef.update({ notifiedAt: Timestamp.now() });
     }
   }
 );

@@ -68,4 +68,37 @@ describe('AiSummary', () => {
 
     await expect(service.analyze(CONTEXT)).rejects.toThrow('No se pudo conectar');
   });
+
+  describe('getUsage()', () => {
+    it('rejects without calling the Worker when there is no signed-in user', async () => {
+      getIdToken.mockResolvedValue(null);
+
+      await expect(service.getUsage()).rejects.toThrow('No hay una sesión activa.');
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('GETs /summary/usage with the ID token as a bearer and returns the parsed result', async () => {
+      const usage = { count: 2, nextAvailableAt: '2026-03-16T00:00:00.000Z' };
+      fetchMock.mockResolvedValue(new Response(JSON.stringify(usage), { status: 200 }));
+
+      await expect(service.getUsage()).resolves.toEqual(usage);
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/summary/usage'),
+        expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer fake-id-token' }) })
+      );
+    });
+
+    it('throws a friendly error when the Worker responds with a non-2xx status', async () => {
+      fetchMock.mockResolvedValue(new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 }));
+
+      await expect(service.getUsage()).rejects.toThrow('No pudimos consultar el uso de IA.');
+    });
+
+    it('throws a friendly error when the network call itself fails', async () => {
+      fetchMock.mockRejectedValue(new Error('network down'));
+
+      await expect(service.getUsage()).rejects.toThrow('No se pudo conectar');
+    });
+  });
 });

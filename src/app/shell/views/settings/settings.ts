@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { ChangeDetectorRef, Component, computed, effect, inject, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -9,6 +9,7 @@ import { AnimatedNumber } from '../../../shared/animated-number/animated-number'
 import { MfxCurrencyInputDirective } from '../../../shared/currency/currency-input.directive';
 import { ProgressRing } from '../../../shared/progress-ring/progress-ring';
 import { ThemeToggle } from '../../../shared/theme-toggle/theme-toggle';
+import { AiSummary, type AiUsageInfo } from '../../../core/ai-summary/ai-summary';
 import { Auth } from '../../../core/auth/auth';
 import {
   calculateBudgetProgress,
@@ -40,7 +41,9 @@ export class Settings {
   private readonly movementsService = inject(MovementsService);
   private readonly groupsService = inject(GroupsService);
   private readonly auth = inject(Auth);
+  private readonly aiSummary = inject(AiSummary);
   private readonly fb = inject(FormBuilder);
+  private readonly changeDetectorRef = inject(ChangeDetectorRef);
 
   private readonly categories = toSignal(this.categoriesService.categories$, { initialValue: [] });
   readonly customCategories = computed(() => this.categories().filter((c) => c.uid !== null));
@@ -85,6 +88,25 @@ export class Settings {
   readonly editingCategoryId = signal<string | null>(null);
   readonly editLimitControl = this.fb.nonNullable.control(0, [Validators.required, Validators.min(1)]);
 
+  // --- Uso de IA (control visible, ver DESIGN.md/BACKLOG 57) ---
+  readonly aiUsage = signal<AiUsageInfo | null>(null);
+  readonly aiUsageLoading = signal(true);
+  readonly aiUsageError = signal<string | null>(null);
+
+  readonly nextAnalysisLabel = computed(() => {
+    const usage = this.aiUsage();
+    if (!usage?.nextAvailableAt) {
+      return 'Disponible ahora mismo.';
+    }
+    const formatted = new Intl.DateTimeFormat('es-CO', {
+      day: 'numeric',
+      month: 'long',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(new Date(usage.nextAvailableAt));
+    return `Disponible de nuevo el ${formatted}.`;
+  });
+
   constructor() {
     // Si la categoría seleccionada para agregar deja de estar disponible
     // (por ejemplo, porque se agregó desde otra pestaña), no dejar un valor
@@ -95,6 +117,26 @@ export class Settings {
         this.addBudgetForm.controls.categoryId.setValue('');
       }
     });
+
+    void this.loadAiUsage();
+  }
+
+  private async loadAiUsage(): Promise<void> {
+    this.aiUsageLoading.set(true);
+    this.aiUsageError.set(null);
+    try {
+      this.aiUsage.set(await this.aiSummary.getUsage());
+    } catch (error) {
+      this.aiUsageError.set(error instanceof Error ? error.message : 'No pudimos consultar el uso de IA.');
+    } finally {
+      this.aiUsageLoading.set(false);
+      // App zoneless (ver la auditoría de Fase 8, mismo motivo que en
+      // Recurring): esta llamada resuelve fuera de cualquier evento
+      // trackeado por Angular — sin este markForCheck(), la sección "Uso
+      // de IA" se queda mostrando "Consultando…" hasta que algo más, ajeno
+      // a este flujo, dispare un re-render por su cuenta.
+      this.changeDetectorRef.markForCheck();
+    }
   }
 
   categoryLabel(categoryId: string): string {

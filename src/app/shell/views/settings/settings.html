@@ -15,6 +15,23 @@
   </mfx-card>
 
   <div class="mfx-section-header">
+    <h2>Uso de IA</h2>
+  </div>
+
+  @if (aiUsageError()) {
+    <p class="mfx-form__error" role="alert">{{ aiUsageError() }}</p>
+  } @else if (aiUsageLoading()) {
+    <mfx-card [index]="0">
+      <p>Consultando…</p>
+    </mfx-card>
+  } @else if (aiUsage(); as usage) {
+    <mfx-card [index]="0">
+      <p>Has usado "Analizar balances" {{ usage.count }} {{ usage.count === 1 ? 'vez' : 'veces' }}.</p>
+      <p>{{ nextAnalysisLabel() }}</p>
+    </mfx-card>
+  }
+
+  <div class="mfx-section-header">
     <h2>Presupuestos</h2>
     @if (!addingBudget() && unbudgetedExpenseCategories().length > 0) {
       <button type="button" class="mfx-section-add" (click)="openAddBudget()">+ Agregar categoría</button>

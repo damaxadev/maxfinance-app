@@ -18,13 +18,15 @@ export interface ForegroundNotification {
 // diálogo) de "ya dijo que no antes" (mandarlo a Ajustes del sistema).
 const ASKED_KEY = 'mfx-notifications-asked';
 
-// Id fijo — el mismo que usa processRecurringPayments (functions/src/index.ts)
-// al construir el mensaje. Tiene que existir ANTES de que llegue el primer
-// push en background/cerrado, o Android no tiene dónde clasificarlo y cae a
-// un canal genérico (o, en versiones viejas, ni siquiera se muestra). Por
-// eso se crea al arranque de la app (ver app.ts), no al pedir el permiso —
-// crear un canal no pide permiso ni le muestra nada al usuario todavía.
+// Ids fijos — los mismos que usan processRecurringPayments/
+// generateMonthlyInsights (functions/src/index.ts) al construir el mensaje.
+// Tienen que existir ANTES de que llegue el primer push en background/
+// cerrado, o Android no tiene dónde clasificarlo y cae a un canal genérico
+// (o, en versiones viejas, ni siquiera se muestra). Por eso se crean al
+// arranque de la app (ver app.ts), no al pedir el permiso — crear un canal
+// no pide permiso ni le muestra nada al usuario todavía.
 export const RECURRING_PAYMENTS_CHANNEL_ID = 'recurring-payments';
+export const MONTHLY_INSIGHT_CHANNEL_ID = 'monthly-insight';
 
 @Injectable({
   providedIn: 'root',
@@ -33,21 +35,40 @@ export class Notifications {
   private readonly firestore = inject(Firestore);
   private readonly auth = inject(Auth);
 
-  // Crea el canal si no existe todavía (createChannel es idempotente: si
-  // el id ya existe, actualiza sus metadatos en vez de duplicarlo). No pide
-  // permiso ni muestra nada — seguro de llamar siempre, incluso antes de
-  // que el usuario decida algo sobre notificaciones. En web es un no-op
-  // (el plugin no lo soporta ahí), por eso el try/catch.
+  // Crea ambos canales si no existen todavía (createChannel es idempotente:
+  // si el id ya existe, actualiza sus metadatos en vez de duplicarlo). No
+  // pide permiso ni muestra nada — seguro de llamar siempre, incluso antes
+  // de que el usuario decida algo sobre notificaciones. Cada canal se
+  // intenta por separado (best-effort): que uno falle no debe impedir que
+  // se cree el otro. En web ambos son no-op (el plugin no lo soporta ahí),
+  // por eso el try/catch.
   async ensureNotificationChannel(): Promise<void> {
-    try {
-      await FirebaseMessaging.createChannel({
+    await Promise.all([
+      this.createChannelSafely({
         id: RECURRING_PAYMENTS_CHANNEL_ID,
         name: 'Pagos recurrentes',
         description: 'Avisos cuando MaxFinance procesa uno de tus pagos recurrentes.',
         importance: Importance.Default,
-      });
+      }),
+      this.createChannelSafely({
+        id: MONTHLY_INSIGHT_CHANNEL_ID,
+        name: 'Resumen mensual',
+        description: 'Aviso cuando tu resumen mensual generado por IA está listo.',
+        importance: Importance.Default,
+      }),
+    ]);
+  }
+
+  private async createChannelSafely(channel: {
+    id: string;
+    name: string;
+    description: string;
+    importance: Importance;
+  }): Promise<void> {
+    try {
+      await FirebaseMessaging.createChannel(channel);
     } catch (error) {
-      console.error('No pudimos crear el canal de notificaciones', error);
+      console.error('No pudimos crear un canal de notificaciones', error);
     }
   }
 

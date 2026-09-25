@@ -6,6 +6,7 @@ import { of } from 'rxjs';
 import { vi } from 'vitest';
 
 import { Settings } from './settings';
+import { AiSummary } from '../../../core/ai-summary/ai-summary';
 import { Auth } from '../../../core/auth/auth';
 import { Budgets } from '../../../core/budgets/budgets';
 import { Categories } from '../../../core/categories/categories';
@@ -25,7 +26,14 @@ function ts(date: Date) {
   return { toDate: () => date } as never;
 }
 
-function configure(opts: { budgets?: unknown[]; movements?: unknown[]; setLimit?: ReturnType<typeof vi.fn> } = {}) {
+function configure(
+  opts: {
+    budgets?: unknown[];
+    movements?: unknown[];
+    setLimit?: ReturnType<typeof vi.fn>;
+    getUsage?: ReturnType<typeof vi.fn>;
+  } = {}
+) {
   return TestBed.configureTestingModule({
     imports: [Settings],
     providers: [
@@ -46,6 +54,10 @@ function configure(opts: { budgets?: unknown[]; movements?: unknown[]; setLimit?
           setLimit: opts.setLimit ?? vi.fn().mockResolvedValue(undefined),
           removeLimit: vi.fn().mockResolvedValue(undefined),
         },
+      },
+      {
+        provide: AiSummary,
+        useValue: { getUsage: opts.getUsage ?? vi.fn().mockResolvedValue({ count: 0, nextAvailableAt: null }) },
       },
     ],
   }).compileComponents();
@@ -223,5 +235,56 @@ describe('Settings with no budgeted categories yet', () => {
 
   it('shows the empty state instead of any category card', () => {
     expect(fixture.nativeElement.textContent).toContain('Todavía no presupuestas ninguna categoría');
+  });
+});
+
+// Fase 8 (control de uso visible, ver DESIGN.md/BACKLOG 57). Usa
+// autoDetectChanges(true) + whenStable() + una espera real (no solo
+// microtasks) para probar de punta a punta el markForCheck() agregado en
+// loadAiUsage() — mismo motivo y misma metodología que recurring.spec.ts/
+// theme-toggle.spec.ts (ver Fase 8, auditoría del bug de change detection
+// en zoneless).
+describe('Settings — Uso de IA (Fase 8)', () => {
+  it('shows the real count and "disponible ahora mismo" when there is no active cooldown', async () => {
+    await configure({ getUsage: vi.fn().mockResolvedValue({ count: 3, nextAvailableAt: null }) });
+    const fixture = TestBed.createComponent(Settings);
+    fixture.autoDetectChanges(true);
+    await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(fixture.nativeElement.textContent).toContain('Has usado "Analizar balances" 3 veces.');
+    expect(fixture.nativeElement.textContent).toContain('Disponible ahora mismo.');
+  });
+
+  it('uses the singular for exactly 1 use', async () => {
+    await configure({ getUsage: vi.fn().mockResolvedValue({ count: 1, nextAvailableAt: null }) });
+    const fixture = TestBed.createComponent(Settings);
+    fixture.autoDetectChanges(true);
+    await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(fixture.nativeElement.textContent).toContain('Has usado "Analizar balances" 1 vez.');
+  });
+
+  it('shows when the 24h window frees up again', async () => {
+    const nextAvailableAt = new Date('2026-03-16T15:00:00-05:00').toISOString();
+    await configure({ getUsage: vi.fn().mockResolvedValue({ count: 2, nextAvailableAt }) });
+    const fixture = TestBed.createComponent(Settings);
+    fixture.autoDetectChanges(true);
+    await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(fixture.nativeElement.textContent).toContain('Disponible de nuevo el');
+    expect(fixture.nativeElement.textContent).not.toContain('Disponible ahora mismo.');
+  });
+
+  it('shows an inline error if consulting usage fails', async () => {
+    await configure({ getUsage: vi.fn().mockRejectedValue(new Error('No pudimos consultar el uso de IA.')) });
+    const fixture = TestBed.createComponent(Settings);
+    fixture.autoDetectChanges(true);
+    await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(fixture.nativeElement.textContent).toContain('No pudimos consultar el uso de IA.');
   });
 });

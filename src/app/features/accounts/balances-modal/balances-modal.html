@@ -21,6 +21,13 @@
     }
   }
 
+  @if (lastMonthInsight(); as insight) {
+    <p class="mfx-balances-modal__subheading">Resumen de {{ lastMonthLabel() }}</p>
+    <mfx-card class="mfx-balances-modal__analysis">
+      <p class="mfx-balances-modal__analysis-text">{{ insight.text }}</p>
+    </mfx-card>
+  }
+
   <button
     type="button"
     class="mfx-btn-primary mfx-balances-modal__analyze"

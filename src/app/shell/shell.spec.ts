@@ -11,6 +11,7 @@ import { Auth } from '../core/auth/auth';
 import { Accounts } from '../core/accounts/accounts';
 import { Budgets } from '../core/budgets/budgets';
 import { Categories } from '../core/categories/categories';
+import { MonthlyInsights } from '../core/monthly-insights/monthly-insights';
 import { MovementsService } from '../core/movements/movements';
 import { Notifications } from '../core/notifications/notifications';
 import { RecurringPayments } from '../core/recurring-payments/recurring-payments';
@@ -131,6 +132,10 @@ describe('Shell', () => {
         // decidir qué botón mostrar por fila) — se mockea acá en vez de
         // dejar que se construya la real, que a su vez necesitaría Firestore.
         { provide: Auth, useValue: { currentUser: { uid: 'u1' } } },
+        // BalancesModal (dentro de Inicio) inyecta MonthlyInsights — se
+        // mockea acá por el mismo motivo que Auth arriba (la real necesita
+        // Firestore, que este TestBed no provee).
+        { provide: MonthlyInsights, useValue: { lastMonthInsight$: of(null) } },
       ],
     }).compileComponents();
 

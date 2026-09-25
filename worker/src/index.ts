@@ -24,6 +24,16 @@ Escribe en español de Colombia, con tuteo (nunca voseo), en un tono cercano y p
 
 Primero un párrafo breve (2-3 frases) resumiendo cómo le fue este mes. Después, en un párrafo aparte, dale 2 o 3 observaciones o sugerencias concretas y prácticas basadas en los números exactos que te dieron — no inventes cifras ni categorías que no aparezcan en los datos. Máximo 120 palabras en total.`;
 
+// Usado por /monthly-summary (insight automático mensual, ver
+// handleMonthlySummary) — mismo tono y formato que SYSTEM_PROMPT, pero
+// aclara que este resumen se generó solo, no porque el usuario lo pidió en
+// este momento.
+const MONTHLY_SYSTEM_PROMPT = `Eres el asistente financiero de MaxFinance, una app de finanzas familiares para Colombia. Este es el resumen automático que la app le envía a un usuario al cierre de cada mes (él no lo pidió en este momento, se genera solo) — te paso el balance por cuenta, los gastos del mes que acaba de cerrar agrupados por categoría y el estado del presupuesto (si el usuario configuró uno).
+
+Escribe en español de Colombia, con tuteo (nunca voseo), en un tono cercano y positivo, como si le hablaras a un amigo — nunca como un asesor formal ni un reporte contable. Responde en texto plano, sin markdown, sin viñetas ni títulos.
+
+Primero un párrafo breve (2-3 frases) resumiendo cómo le fue en el mes que acaba de terminar. Después, en un párrafo aparte, dale 2 o 3 observaciones o sugerencias concretas y prácticas basadas en los números exactos que te dieron — no inventes cifras ni categorías que no aparezcan en los datos. Máximo 120 palabras en total.`;
+
 interface AccountBalanceInput {
   name: string;
   balance: number;
@@ -101,7 +111,7 @@ function buildUserPrompt(body: SummaryRequestBody): string {
   );
 }
 
-async function callAnthropic(env: Env, userPrompt: string): Promise<string> {
+async function callAnthropic(env: Env, systemPrompt: string, userPrompt: string): Promise<string> {
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
     headers: {
@@ -112,7 +122,7 @@ async function callAnthropic(env: Env, userPrompt: string): Promise<string> {
     body: JSON.stringify({
       model: ANTHROPIC_MODEL,
       max_tokens: 400,
-      system: SYSTEM_PROMPT,
+      system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     }),
   });
@@ -171,7 +181,7 @@ async function handleSummary(request: Request, env: Env, origin: string | null):
 
   let summary: string;
   try {
-    summary = await callAnthropic(env, buildUserPrompt(rawBody));
+    summary = await callAnthropic(env, SYSTEM_PROMPT, buildUserPrompt(rawBody));
   } catch (error) {
     console.error('Error al generar el resumen con la API de Anthropic', error);
     return jsonResponse({ error: 'ai_unavailable' }, 502, origin);
@@ -180,7 +190,81 @@ async function handleSummary(request: Request, env: Env, origin: string | null):
   const generatedAt = new Date().toISOString();
   await env.AI_SUMMARY_CACHE.put(cacheKey, JSON.stringify({ summary, generatedAt } satisfies CachedSummary));
 
+  // Contador de consultas reales (no cacheadas) — lo único que consulta
+  // Ajustes ("Uso de IA", ver handleUsage) para mostrar cuántas veces se ha
+  // usado "Analizar balances", sin inventar una cifra en dólares.
+  const countKey = `summary-count:${uid}`;
+  const currentCountRaw = await env.AI_SUMMARY_CACHE.get(countKey);
+  const nextCount = (currentCountRaw ? parseInt(currentCountRaw, 10) : 0) + 1;
+  await env.AI_SUMMARY_CACHE.put(countKey, String(nextCount));
+
   return jsonResponse({ summary, cached: false, generatedAt }, 200, origin);
+}
+
+// Flujo servidor-a-servidor del insight automático mensual (ver
+// functions/src/index.ts, generateMonthlyInsights) — solo acepta
+// X-Internal-Key, nunca un ID token de Firebase, porque nadie hace esta
+// llamada desde el navegador. A diferencia de /summary, NUNCA toca
+// AI_SUMMARY_CACHE: compartir esa caché de 24h pisaría el resultado bajo
+// demanda del usuario (o al revés) — este es un proceso completamente
+// aparte, ya controlado por correr una sola vez al mes (ver DESIGN.md/
+// BACKLOG 56).
+async function handleMonthlySummary(request: Request, env: Env, origin: string | null): Promise<Response> {
+  const auth = await authenticate(request, env);
+  if (!auth.ok || auth.source !== 'internal') {
+    return jsonResponse({ error: 'unauthorized' }, 401, origin);
+  }
+
+  let rawBody: unknown;
+  try {
+    rawBody = await request.json();
+  } catch {
+    return jsonResponse({ error: 'invalid_body' }, 400, origin);
+  }
+
+  if (!isValidSummaryBody(rawBody) || !rawBody.uid) {
+    return jsonResponse({ error: 'invalid_body' }, 400, origin);
+  }
+
+  let summary: string;
+  try {
+    summary = await callAnthropic(env, MONTHLY_SYSTEM_PROMPT, buildUserPrompt(rawBody));
+  } catch (error) {
+    console.error('Error al generar el insight mensual con la API de Anthropic', error);
+    return jsonResponse({ error: 'ai_unavailable' }, 502, origin);
+  }
+
+  return jsonResponse({ summary, generatedAt: new Date().toISOString() }, 200, origin);
+}
+
+interface UsageResponse {
+  count: number;
+  nextAvailableAt: string | null;
+}
+
+// Consultado por Ajustes ("Uso de IA", ver DESIGN.md/BACKLOG 57) — solo
+// acepta un ID token de Firebase (es el propio usuario consultando su
+// propio uso, nunca una llamada servidor-a-servidor).
+async function handleUsage(request: Request, env: Env, origin: string | null): Promise<Response> {
+  const auth = await authenticate(request, env);
+  if (!auth.ok || auth.source !== 'firebase') {
+    return jsonResponse({ error: 'unauthorized' }, 401, origin);
+  }
+
+  const countRaw = await env.AI_SUMMARY_CACHE.get(`summary-count:${auth.uid}`);
+  const count = countRaw ? parseInt(countRaw, 10) : 0;
+
+  let nextAvailableAt: string | null = null;
+  const cachedRaw = await env.AI_SUMMARY_CACHE.get(`summary:${auth.uid}`);
+  if (cachedRaw) {
+    const cached = JSON.parse(cachedRaw) as CachedSummary;
+    const generatedAtMs = new Date(cached.generatedAt).getTime();
+    if (Date.now() - generatedAtMs < CACHE_TTL_MS) {
+      nextAvailableAt = new Date(generatedAtMs + CACHE_TTL_MS).toISOString();
+    }
+  }
+
+  return jsonResponse({ count, nextAvailableAt } satisfies UsageResponse, 200, origin);
 }
 
 export default {
@@ -194,6 +278,14 @@ export default {
 
     if (request.method === 'POST' && url.pathname === '/summary') {
       return handleSummary(request, env, origin);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/monthly-summary') {
+      return handleMonthlySummary(request, env, origin);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/summary/usage') {
+      return handleUsage(request, env, origin);
     }
 
     return new Response('Not found', { status: 404, headers: corsHeaders(origin) });
