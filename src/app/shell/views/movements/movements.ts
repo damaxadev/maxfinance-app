@@ -16,6 +16,7 @@ import {
 import { MovementFormState } from '../../../core/movement-form-state/movement-form-state';
 import { AccountFormState } from '../../../core/account-form-state/account-form-state';
 import type { AccountType } from '../../../models/account.model';
+import { isSharedGroup } from '../../../models/group.model';
 import type { MovementType } from '../../../models/movement.model';
 
 const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
@@ -37,6 +38,9 @@ export interface MovementListItem {
   date: Timestamp;
   accountId: string | null;
   groupName: string | null;
+  // Un grupo personal solo muestra su nombre como etiqueta, sin la palabra
+  // "Compartido" — ver DATABASE.md, "Grupos personales".
+  groupIsShared: boolean;
   personal: PersonalMovementWithId | null;
 }
 
@@ -91,6 +95,7 @@ export class Movements {
       date: m.date,
       accountId: m.accountId,
       groupName: null,
+      groupIsShared: false,
       personal: m,
     }));
     const shared: MovementListItem[] = this.sharedMovements().map((m) => ({
@@ -102,6 +107,7 @@ export class Movements {
       date: m.date,
       accountId: m.accountId ?? null,
       groupName: this.groupsById().get(m.groupId)?.name ?? 'Grupo',
+      groupIsShared: isSharedGroup(this.groupsById().get(m.groupId)),
       personal: null,
     }));
     return [...personal, ...shared].sort((a, b) => b.date.toMillis() - a.date.toMillis());

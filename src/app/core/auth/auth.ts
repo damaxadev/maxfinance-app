@@ -1,7 +1,7 @@
 import { Injectable, Injector, inject, runInInjectionContext } from '@angular/core';
-import { BehaviorSubject, Observable, filter } from 'rxjs';
+import { BehaviorSubject, Observable, catchError, filter, map, of, switchMap } from 'rxjs';
 import { FirebaseAuthentication, type User as AuthUser } from '@capacitor-firebase/authentication';
-import { Firestore, doc, getDoc, setDoc, updateDoc, serverTimestamp } from '@angular/fire/firestore';
+import { Firestore, doc, docData, getDoc, setDoc, updateDoc, serverTimestamp } from '@angular/fire/firestore';
 import { Auth as FirebaseJsAuth } from '@angular/fire/auth';
 import { GoogleAuthProvider, signInWithCredential, signOut as signOutFromFirebaseJsAuth } from 'firebase/auth';
 
@@ -25,6 +25,18 @@ export class Auth {
 
   readonly currentUser$: Observable<AuthUser | null> = this.authState.pipe(
     filter((user): user is AuthUser | null => user !== undefined)
+  );
+
+  // Documento users/{uid} en vivo — a diferencia de AuthUser (que solo trae
+  // lo que expone el SDK nativo de Google), esto tiene los campos propios de
+  // MaxFinance (createdAt, phone) que Perfil necesita mostrar/editar.
+  readonly userDocument$: Observable<User | null> = this.currentUser$.pipe(
+    switchMap((user) => (user ? (docData(doc(this.firestore, 'users', user.uid)) as Observable<User | undefined>) : of(null))),
+    map((data) => data ?? null),
+    catchError((error) => {
+      console.error('Error al leer el documento de usuario', error);
+      return of(null);
+    })
   );
 
   constructor() {
@@ -97,6 +109,15 @@ export class Auth {
     }
 
     await updateDoc(doc(this.firestore, 'users', user.uid), { displayName });
+  }
+
+  async updatePhone(phone: string): Promise<void> {
+    const user = this.currentUser;
+    if (!user) {
+      throw new Error('No hay un usuario autenticado.');
+    }
+
+    await updateDoc(doc(this.firestore, 'users', user.uid), { phone: phone.trim() || null });
   }
 
   private async ensureUserDocument(user: AuthUser): Promise<void> {

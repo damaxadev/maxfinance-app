@@ -221,6 +221,37 @@ describe('MovementForm', () => {
     expect(value.date.getHours()).toBe(9);
     expect(value.date.getMinutes()).toBe(5);
   });
+
+  it('creates without a groupId by default (plain personal movement)', async () => {
+    component.form.setValue({
+      type: 'expense',
+      amount: 10,
+      accountId: 'acc1',
+      categoryId: 'cat-expense',
+      date: '2026-03-10',
+      note: '',
+    });
+
+    await component.submit();
+
+    expect(create).toHaveBeenCalledWith(expect.anything(), null);
+  });
+
+  it('passes the groupId input through to create() (expense inside a personal group, Fase 9)', async () => {
+    fixture.componentRef.setInput('groupId', 'personal-group-1');
+    component.form.setValue({
+      type: 'expense',
+      amount: 10,
+      accountId: 'acc1',
+      categoryId: 'cat-expense',
+      date: '2026-03-10',
+      note: '',
+    });
+
+    await component.submit();
+
+    expect(create).toHaveBeenCalledWith(expect.anything(), 'personal-group-1');
+  });
 });
 
 describe('MovementForm while categories are still loading', () => {

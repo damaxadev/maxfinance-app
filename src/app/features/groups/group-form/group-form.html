@@ -1,4 +1,20 @@
 <form class="mfx-form" [formGroup]="form" (ngSubmit)="submit()">
+  <div class="mfx-segmented" role="radiogroup" aria-label="Tipo de grupo">
+    <div class="mfx-segmented__thumb" [class.mfx-segmented__thumb--shared]="typeValue() === 'shared'"></div>
+    @for (option of groupTypes; track option.value) {
+      <button
+        type="button"
+        class="mfx-segmented__option"
+        role="radio"
+        [attr.aria-checked]="typeValue() === option.value"
+        [class.mfx-segmented__option--active]="typeValue() === option.value"
+        (click)="selectType(option.value)"
+      >
+        {{ option.label }}
+      </button>
+    }
+  </div>
+
   <label class="mfx-form__field">
     Nombre del grupo
     <input type="text" formControlName="name" placeholder="Ej. Apartamento, Viaje a la playa" />

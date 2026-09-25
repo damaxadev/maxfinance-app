@@ -22,9 +22,16 @@ function toDateInputValue(date: Date): string {
 
 type Frequency = RecurringPaymentFormValue['frequency'];
 
+// Orden de más a menos frecuente — ver DATABASE.md/BACKLOG 63.
 const FREQUENCIES: { value: Frequency; label: string }[] = [
-  { value: 'monthly', label: 'Mensual' },
+  { value: 'daily', label: 'Diaria' },
   { value: 'weekly', label: 'Semanal' },
+  { value: 'biweekly', label: 'Quincenal' },
+  { value: 'monthly', label: 'Mensual' },
+  { value: 'bimonthly', label: 'Bimestral' },
+  { value: 'quarterly', label: 'Trimestral' },
+  { value: 'semiannual', label: 'Semestral' },
+  { value: 'annual', label: 'Anual' },
 ];
 
 @Component({

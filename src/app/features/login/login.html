@@ -1,10 +1,14 @@
 <main class="mfx-login">
+  <div class="mfx-login__bg" aria-hidden="true"></div>
+
   <mfx-theme-toggle class="mfx-login__theme-toggle" />
 
-  <mfx-card class="mfx-login__card">
+  <div class="mfx-login__intro">
     <h1>MaxFinance</h1>
     <p>Inicia sesión para llevar tus gastos personales y compartidos.</p>
+  </div>
 
+  <div class="mfx-login__action">
     <button type="button" class="mfx-google-btn" [disabled]="loading()" (click)="signInWithGoogle()">
       <svg class="mfx-google-btn__icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
         <path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.46c-.28 1.5-1.13 2.77-2.4 3.62v3h3.88c2.27-2.09 3.58-5.17 3.58-8.81z" />
@@ -18,5 +22,7 @@
     @if (errorMessage()) {
       <p class="mfx-login__error" role="alert">{{ errorMessage() }}</p>
     }
-  </mfx-card>
+  </div>
+
+  <p class="mfx-login__credit">v{{ appVersion }} · By DM</p>
 </main>

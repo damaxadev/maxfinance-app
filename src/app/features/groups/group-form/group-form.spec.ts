@@ -47,20 +47,35 @@ describe('GroupForm', () => {
     expect(error?.textContent).toContain('El nombre es obligatorio.');
   });
 
-  it('creates the group and emits saved', async () => {
+  it('creates a shared group (default type) and emits saved', async () => {
     const emitted: void[] = [];
     component.saved.subscribe(() => emitted.push(undefined));
-    component.form.setValue({ name: 'Apartamento' });
+    component.form.setValue({ name: 'Apartamento', type: 'shared' });
 
     await component.submit();
 
-    expect(create).toHaveBeenCalledWith('Apartamento');
+    expect(create).toHaveBeenCalledWith('Apartamento', 'shared');
     expect(emitted.length).toBe(1);
+  });
+
+  it('creates a personal group once selected via the segmented control', async () => {
+    component.selectType('personal');
+    component.form.controls.name.setValue('Ahorros');
+
+    await component.submit();
+
+    expect(create).toHaveBeenCalledWith('Ahorros', 'personal');
+  });
+
+  it('defaults to "Compartido" selected in the segmented control', () => {
+    expect(component.typeValue()).toBe('shared');
+    const activeOption: HTMLButtonElement = fixture.nativeElement.querySelector('.mfx-segmented__option--active');
+    expect(activeOption.textContent?.trim()).toBe('Compartido');
   });
 
   it('shows a generic error message if creation fails', async () => {
     create.mockRejectedValue(new Error('boom'));
-    component.form.setValue({ name: 'Apartamento' });
+    component.form.setValue({ name: 'Apartamento', type: 'shared' });
 
     await component.submit();
 

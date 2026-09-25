@@ -1,0 +1,18 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00E6A8" />
+      <stop offset="100%" stop-color="#FFD166" />
+    </linearGradient>
+    <mask id="dollar-cutout" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#ffffff" />
+      <g fill="none" stroke="#000000" stroke-width="60" stroke-linecap="round">
+        <path d="M512 490 V810" />
+        <path d="M512 520 A65 65 0 0 0 512 650 A65 65 0 0 1 512 780" />
+      </g>
+    </mask>
+  </defs>
+
+  <rect width="1024" height="1024" rx="192" fill="url(#grad)" />
+  <path d="M512 220 L724 460 L724 820 L300 820 L300 460 Z" fill="#060B14" mask="url(#dollar-cutout)" />
+</svg>

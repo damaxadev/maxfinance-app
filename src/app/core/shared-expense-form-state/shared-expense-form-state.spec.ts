@@ -33,4 +33,19 @@ describe('SharedExpenseFormState', () => {
     service.close();
     expect(service.request()).toBeNull();
   });
+
+  it('starts isPersonalFlow as false', () => {
+    expect(service.isPersonalFlow()).toBe(false);
+  });
+
+  it('setPersonalFlow() updates isPersonalFlow()', () => {
+    service.setPersonalFlow(true);
+    expect(service.isPersonalFlow()).toBe(true);
+  });
+
+  it('openCreate() resets isPersonalFlow to false (stale value from a previous open)', () => {
+    service.setPersonalFlow(true);
+    service.openCreate('group1');
+    expect(service.isPersonalFlow()).toBe(false);
+  });
 });

@@ -34,7 +34,7 @@
               <span class="mfx-home__movement-tag">
                 {{ movement.dateLabel }}
                 @if (movement.groupName) {
-                  · Compartido · {{ movement.groupName }}
+                  · {{ movement.groupIsShared ? 'Compartido · ' : '' }}{{ movement.groupName }}
                 }
               </span>
             </div>
@@ -58,7 +58,7 @@
   </div>
 
   <mfx-card [index]="4">
-    <mfx-group-activity [groupIds]="groupIds()" [members]="allMemberProfiles()" [limit]="5" />
+    <mfx-group-activity [groupIds]="sharedGroupIds()" [members]="allMemberProfiles()" [limit]="5" />
   </mfx-card>
 
   <div class="mfx-home__section-header-row">
@@ -114,6 +114,10 @@
       </mfx-card>
     }
   }
+
+  <div class="mfx-home__section-header-row">
+    <h2 class="mfx-home__section-title">Zona de análisis</h2>
+  </div>
 
   <mfx-card [index]="13">
     <p class="mfx-home__chart-title">Tendencia mensual</p>

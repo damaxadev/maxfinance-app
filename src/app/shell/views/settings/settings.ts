@@ -1,11 +1,12 @@
 import { ChangeDetectorRef, Component, computed, effect, inject, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { switchMap } from 'rxjs';
 
 import { Card } from '../../../shared/card/card';
 import { AnimatedNumber } from '../../../shared/animated-number/animated-number';
+import { Avatar } from '../../../shared/avatar/avatar';
 import { MfxCurrencyInputDirective } from '../../../shared/currency/currency-input.directive';
 import { ProgressRing } from '../../../shared/progress-ring/progress-ring';
 import { ThemeToggle } from '../../../shared/theme-toggle/theme-toggle';
@@ -30,7 +31,7 @@ function toMonthKey(date: Date): string {
 
 @Component({
   selector: 'mfx-settings',
-  imports: [Card, RouterLink, AnimatedNumber, ProgressRing, ReactiveFormsModule, MfxCurrencyInputDirective, ThemeToggle],
+  imports: [Card, Avatar, AnimatedNumber, ProgressRing, ReactiveFormsModule, MfxCurrencyInputDirective, ThemeToggle],
   templateUrl: './settings.html',
   styleUrl: './settings.scss',
 })
@@ -44,6 +45,9 @@ export class Settings {
   private readonly aiSummary = inject(AiSummary);
   private readonly fb = inject(FormBuilder);
   private readonly changeDetectorRef = inject(ChangeDetectorRef);
+  private readonly router = inject(Router);
+
+  readonly currentUser = toSignal(this.auth.currentUser$, { initialValue: this.auth.currentUser });
 
   private readonly categories = toSignal(this.categoriesService.categories$, { initialValue: [] });
   readonly customCategories = computed(() => this.categories().filter((c) => c.uid !== null));
@@ -231,5 +235,9 @@ export class Settings {
 
   openEditCategory(category: CategoryWithId): void {
     this.categoryFormState.openEdit(category);
+  }
+
+  goToProfile(): void {
+    void this.router.navigate(['/perfil']);
   }
 }

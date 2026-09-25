@@ -261,10 +261,41 @@ describe('Home recentMovements()', () => {
       amount: 30,
       type: 'expense',
       groupName: 'Apartamento',
+      groupIsShared: true,
       dateLabel: expect.any(String),
     });
     expect(items[1].id).toBe('m-personal');
     expect(items[1].groupName).toBeNull();
+  });
+
+  it('labels a movement from a personal group with just the group name, no "Compartido" (Fase 9)', async () => {
+    const personalGroup = {
+      id: 'group-personal',
+      name: 'Ahorros',
+      members: ['u1'],
+      createdBy: 'u1',
+      createdAt: {} as never,
+      type: 'personal' as const,
+    };
+    TestBed.resetTestingModule();
+    await configure({
+      groups: [personalGroup],
+      movements: [
+        { id: 'm-personal-group', categoryId: 'cat-food', amount: 20, type: 'expense', date: ts(new Date()), groupId: 'group-personal' },
+      ],
+    });
+    const personalFixture = TestBed.createComponent(Home);
+    const personalComponent = personalFixture.componentInstance;
+    personalFixture.detectChanges();
+
+    const item = personalComponent.recentMovements()[0];
+    expect(item.groupName).toBe('Ahorros');
+    expect(item.groupIsShared).toBe(false);
+
+    personalFixture.detectChanges();
+    const tag = personalFixture.nativeElement.querySelector('.mfx-home__movement-tag');
+    expect(tag.textContent).toContain('Ahorros');
+    expect(tag.textContent).not.toContain('Compartido');
   });
 
   it('caps the list at 3, even with more movements', async () => {
@@ -311,6 +342,27 @@ describe('Home "Gastos compartidos recientes" (wiring into GroupActivity)', () =
     expect(component.groupIds()).toEqual(['group1', 'group2', 'group3', 'group4']);
     expect(getMemberProfiles).toHaveBeenCalledTimes(4);
     expect(component.allMemberProfiles().length).toBe(4);
+  });
+
+  it('sharedGroupIds() excludes personal groups, unlike groupIds() (Fase 9)', async () => {
+    const personalGroup = {
+      id: 'group-personal',
+      name: 'Ahorros',
+      members: ['u1'],
+      createdBy: 'u1',
+      createdAt: {} as never,
+      type: 'personal' as const,
+    };
+    await configure({ groups: [group1, personalGroup] });
+
+    const fixture = TestBed.createComponent(Home);
+    const component = fixture.componentInstance;
+    fixture.detectChanges();
+    await flushMicrotasks();
+    fixture.detectChanges();
+
+    expect(component.groupIds()).toEqual(['group1', 'group-personal']);
+    expect(component.sharedGroupIds()).toEqual(['group1']);
   });
 
   it('renders the shared activity feed (via mfx-group-activity) with the group name tag once there is more than one group', async () => {
@@ -450,6 +502,15 @@ describe('Home charts', () => {
     fixture.detectChanges();
 
     expect(chartInstances.find((c) => c.type === 'doughnut')).toBeUndefined();
+  });
+
+  it('groups both charts under a "Zona de análisis" section header (Fase 9)', async () => {
+    await configure();
+    const fixture = TestBed.createComponent(Home);
+    fixture.detectChanges();
+
+    const heading = fixture.nativeElement.querySelector('.mfx-home__section-title');
+    expect(heading.textContent.trim()).toBe('Zona de análisis');
   });
 });
 

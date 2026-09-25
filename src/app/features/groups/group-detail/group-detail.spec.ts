@@ -146,6 +146,12 @@ describe('GroupDetail (viewed by the creator)', () => {
     expect(state.request()).toEqual({ groupId: 'group1' });
   });
 
+  it('treats a group with no type field as shared (backward compat, Fase 9)', () => {
+    expect(component.isSharedGroup()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Balance');
+    expect(fixture.nativeElement.textContent).not.toContain('Total gastado');
+  });
+
   it('renders the "+ Agregar gasto" button', () => {
     const buttons = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button'));
     expect(buttons.map((b) => b.textContent?.trim())).toContain('+ Agregar gasto');
@@ -374,6 +380,108 @@ describe('GroupDetail (viewed by the creator)', () => {
 
     expect(component.inviteError()).toBe('Esta persona aún no tiene cuenta en MaxFinance.');
     expect(component.inviteSuccess()).toBe(false);
+  });
+});
+
+describe('GroupDetail with a personal group (Fase 9)', () => {
+  let component: GroupDetail;
+  let fixture: ComponentFixture<GroupDetail>;
+
+  const personalGroup = {
+    id: 'group-personal',
+    name: 'Ahorros',
+    members: ['u1'],
+    createdBy: 'u1',
+    createdAt: {} as never,
+    type: 'personal' as const,
+  };
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [GroupDetail],
+      providers: [
+        { provide: Auth, useValue: { currentUser: { uid: 'u1', email: 'diego@example.com' }, isAdmin: false } },
+        {
+          provide: GroupsService,
+          useValue: {
+            groups$: of([personalGroup]),
+            leave: vi.fn(),
+            removeMember: vi.fn(),
+            remove: vi.fn(),
+            inviteByEmail: vi.fn(),
+            inviteByUid: vi.fn(),
+            getMemberProfiles: vi.fn().mockResolvedValue([]),
+            getKnownContacts: vi.fn().mockResolvedValue([]),
+          },
+        },
+        {
+          provide: MovementsService,
+          useValue: {
+            groupMovements$: () =>
+              of([
+                { id: 'm1', type: 'expense', amount: 100000, categoryId: 'c1', date: {} as never, note: '', groupId: 'group-personal' },
+                { id: 'm2', type: 'expense', amount: 50000, categoryId: 'c1', date: {} as never, note: '', groupId: 'group-personal' },
+                { id: 'm3', type: 'income', amount: 999999, categoryId: 'c1', date: {} as never, note: '', groupId: 'group-personal' },
+              ]),
+            allSharedMovementsForGroups$: () => of([]),
+            countGroupMovements: vi.fn().mockResolvedValue(0),
+          },
+        },
+        {
+          provide: SettlementsService,
+          useValue: {
+            settlements$: () => of([]),
+            settlementsForGroups$: () => of([]),
+            findLinkedMovementSettlementIds: vi.fn().mockResolvedValue(new Set()),
+            countGroupSettlements: vi.fn().mockResolvedValue(0),
+          },
+        },
+        { provide: Accounts, useValue: { accounts$: of([]) } },
+        { provide: Categories, useValue: { categories$: of([]) } },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(GroupDetail);
+    fixture.componentRef.setInput('groupId', 'group-personal');
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+  });
+
+  it('is not a shared group', () => {
+    expect(component.isSharedGroup()).toBe(false);
+  });
+
+  it('shows "Total gastado" instead of "Balance"', () => {
+    expect(fixture.nativeElement.textContent).toContain('Total gastado');
+    expect(fixture.nativeElement.textContent).not.toContain('Balance');
+    expect(fixture.nativeElement.querySelector('mfx-group-balance')).toBeNull();
+  });
+
+  it('totalSpent() sums only expense movements, ignoring income', () => {
+    expect(component.totalSpent()).toBe(150000);
+  });
+
+  it('never shows the "Invitar" section for a personal group', () => {
+    expect(fixture.nativeElement.textContent).not.toContain('Invitar');
+    expect(fixture.nativeElement.querySelector('.mfx-group-detail__contacts')).toBeNull();
+  });
+
+  it('still shows "Actividad reciente"', () => {
+    expect(fixture.nativeElement.querySelector('mfx-group-activity')).toBeTruthy();
+  });
+
+  // Fase 9 (corrección posterior): "+ Agregar gasto" siempre abre el
+  // formulario estándar de gasto compartido, sin importar el type del
+  // grupo — un intento anterior de esta feature sí tenía una rama especial
+  // acá (MovementForm para grupos personales), ya revertida.
+  it('addExpense() opens the standard shared-expense form, same as for a shared group', () => {
+    const sharedExpenseFormState = TestBed.inject(SharedExpenseFormState);
+
+    component.addExpense();
+
+    expect(sharedExpenseFormState.request()).toEqual({ groupId: 'group-personal' });
   });
 });
 

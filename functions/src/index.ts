@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase-admin/app';
 import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore';
 import type { DocumentSnapshot, Firestore } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
+import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
@@ -28,6 +29,7 @@ const WORKER_URL = 'https://maxfinance-worker.damaxa134.workers.dev';
 // src/app/core/notifications/notifications.ts — ver el comentario ahí.
 const RECURRING_PAYMENTS_CHANNEL_ID = 'recurring-payments';
 const MONTHLY_INSIGHT_CHANNEL_ID = 'monthly-insight';
+const GROUP_ACTIVITY_CHANNEL_ID = 'group-activity';
 
 interface UserProfile {
   uid: string;
@@ -109,6 +111,21 @@ export const inviteGroupMember = onCall({ region: REGION }, async (request): Pro
   }
 
   await groupRef.update({ members: FieldValue.arrayUnion(invitedUid) });
+
+  // Best-effort: si falla el push, la invitación ya quedó registrada
+  // igual (no se relanza el error). Cada invitación es una llamada
+  // aparte a esta misma función, así que agregar a varias personas de
+  // una siempre termina en una notificación por persona, nunca una sola
+  // para todas.
+  const inviterSnap = await firestore.collection('users').doc(uid).get();
+  const inviterName = (inviterSnap.data()?.['displayName'] as string | undefined) || 'Alguien';
+  const groupName = (groupSnap.data()?.['name'] as string | undefined) ?? 'un grupo';
+  await sendPushNotification(firestore, invitedUid, {
+    title: 'Te agregaron a un grupo',
+    body: `${inviterName} te agregó al grupo ${groupName}`,
+    channelId: GROUP_ACTIVITY_CHANNEL_ID,
+    data: { type: 'group-detail', groupId },
+  });
 
   return { uid: invitedUid };
 });
@@ -224,23 +241,65 @@ export const getKnownContacts = onCall({ region: REGION }, async (request): Prom
   return userSnaps.filter((snap) => snap.exists).map(toUserProfile);
 });
 
-function advanceNextDate(current: Date, frequency: string): Date {
-  const next = new Date(current);
-  if (frequency === 'weekly') {
-    next.setDate(next.getDate() + 7);
-  } else {
-    // 'monthly' es el caso normal; cualquier otro valor futuro que
-    // DATABASE.md deja abierto ("etc") cae acá también, mensual por defecto
-    // en vez de fallar en silencio o quedar sin avanzar nunca.
-    next.setMonth(next.getMonth() + 1);
-  }
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
   return next;
+}
+
+// setMonth() ingenuo tiene el bug clásico de fin de mes: 31 de enero + 1 mes
+// da 3 de marzo (Date hace overflow al mes siguiente porque febrero no tiene
+// 31 días), no 28 de febrero — confirmado con Date(2026,0,31).setMonth(1)
+// antes de este fix. Acá se calcula primero el mes destino, se calcula
+// cuántos días tiene, y se recorta el día original a ese máximo.
+function addMonthsClamped(date: Date, months: number): Date {
+  const targetMonthIndex = date.getMonth() + months;
+  const firstOfTargetMonth = new Date(date.getFullYear(), targetMonthIndex, 1);
+  const lastDayOfTargetMonth = new Date(firstOfTargetMonth.getFullYear(), firstOfTargetMonth.getMonth() + 1, 0).getDate();
+  const day = Math.min(date.getDate(), lastDayOfTargetMonth);
+  return new Date(
+    firstOfTargetMonth.getFullYear(),
+    firstOfTargetMonth.getMonth(),
+    day,
+    date.getHours(),
+    date.getMinutes(),
+    date.getSeconds(),
+    date.getMilliseconds()
+  );
+}
+
+// Fase 9 (BACKLOG 63): antes solo 'monthly'/'weekly' — 'monthly' sigue
+// siendo el default para cualquier valor futuro que DATABASE.md deja
+// abierto, en vez de fallar en silencio o quedar sin avanzar nunca.
+function advanceNextDate(current: Date, frequency: string): Date {
+  switch (frequency) {
+    case 'daily':
+      return addDays(current, 1);
+    case 'weekly':
+      return addDays(current, 7);
+    case 'biweekly':
+      return addDays(current, 15);
+    case 'bimonthly':
+      return addMonthsClamped(current, 2);
+    case 'quarterly':
+      return addMonthsClamped(current, 3);
+    case 'semiannual':
+      return addMonthsClamped(current, 6);
+    case 'annual':
+      return addMonthsClamped(current, 12);
+    case 'monthly':
+    default:
+      return addMonthsClamped(current, 1);
+  }
 }
 
 interface PushNotificationContent {
   title: string;
   body: string;
   channelId: string;
+  // Deep link (ver notifications.ts del cliente, listenForNotificationTaps)
+  // — FCM exige que los valores de "data" sean siempre string.
+  data?: Record<string, string>;
 }
 
 // Envía la notificación a TODOS los dispositivos del usuario (no solo el
@@ -274,6 +333,7 @@ async function sendPushNotification(firestore: Firestore, uid: string, content: 
           // sin esto, Android puede enrutar la notificación a un canal
           // genérico en vez del que se creó.
           android: { notification: { channelId: content.channelId } },
+          ...(content.data ? { data: content.data } : {}),
         });
         console.log(`[sendPushNotification] enviado a ${shortToken} — messageId=${messageId}`);
       } catch (error) {
@@ -375,6 +435,34 @@ export const processRecurringPayments = onSchedule(
 
       await notifyRecurringPaymentProcessed(firestore, uid, payment['name'] as string, amount);
     }
+
+    // Recordatorio a 3 días — NO procesa el pago ni registra ningún
+    // movement, solo avisa. El bloque de arriba (nextDate <= hoy) sigue
+    // siendo el único que de verdad cobra/registra; esto es aparte.
+    const reminderStart = bogotaDayBoundary(now.toDate(), 3);
+    const reminderEnd = bogotaDayBoundary(now.toDate(), 4);
+    const reminderSnap = await firestore
+      .collection('recurringPayments')
+      .where('active', '==', true)
+      .where('nextDate', '>=', reminderStart)
+      .where('nextDate', '<', reminderEnd)
+      .get();
+
+    console.log(`[processRecurringPayments] ${reminderSnap.size} recordatorio(s) a 3 días encontrado(s)`);
+
+    for (const paymentDoc of reminderSnap.docs) {
+      const payment = paymentDoc.data();
+      const uid = payment['uid'] as string | null;
+      if (!uid) {
+        continue; // recurrente de grupo — mismo criterio que el bloque de arriba
+      }
+      const amount = payment['amount'] as number;
+      await sendPushNotification(firestore, uid, {
+        title: 'Pago próximo a vencer',
+        body: `Tu pago de ${payment['name']} vence en 3 días: $${amount.toLocaleString('es-CO')}`,
+        channelId: RECURRING_PAYMENTS_CHANNEL_ID,
+      });
+    }
   }
 );
 
@@ -396,6 +484,17 @@ function monthKeyOf(wallClock: Date): string {
 // UTC) — para filtrar movements por rango de fecha.
 function bogotaMonthStart(year: number, monthIndex0: number): Timestamp {
   return Timestamp.fromMillis(Date.UTC(year, monthIndex0, 1) + BOGOTA_OFFSET_MS);
+}
+
+// Medianoche en Bogotá de "baseDate + daysOffset días", como Timestamp real
+// — usado por el recordatorio de recurrentes a 3 días (ver
+// processRecurringPayments) para acotar nextDate a un día calendario
+// completo en vez de una igualdad exacta de Timestamp, que se rompería si
+// alguna vez existe un nextDate que no caiga justo en medianoche.
+function bogotaDayBoundary(baseDate: Date, daysOffset: number): Timestamp {
+  const wallClock = toBogotaWallClock(baseDate);
+  const utcMidnight = Date.UTC(wallClock.getUTCFullYear(), wallClock.getUTCMonth(), wallClock.getUTCDate() + daysOffset);
+  return Timestamp.fromMillis(utcMidnight + BOGOTA_OFFSET_MS);
 }
 
 function monthLabelEs(monthKey: string): string {
@@ -592,3 +691,54 @@ export const generateMonthlyInsights = onSchedule(
     }
   }
 );
+
+interface MovementSplitForNotify {
+  uid: string;
+  amount: number;
+}
+
+// Se dispara al crear CUALQUIER movement — solo actúa si es un gasto
+// compartido con división (groupId + paidBy + splits, ver DATABASE.md).
+// Un movimiento personal (groupId: null, sin splits) no entra al if. Un
+// gasto de un grupo personal de un solo miembro (ver SharedExpenseForm,
+// "flujo personal") SÍ tiene splits, pero su único split es el propio
+// pagador — el filtro `split.uid !== paidBy` de abajo lo deja en cero
+// notificaciones sin necesitar ninguna rama especial acá.
+export const notifySharedExpenseAssigned = onDocumentCreated({ document: 'movements/{movementId}', region: REGION }, async (event) => {
+  const snap = event.data;
+  if (!snap) {
+    return;
+  }
+  const movement = snap.data();
+  const groupId = movement['groupId'] as string | null;
+  const paidBy = movement['paidBy'] as string | undefined;
+  const splits = movement['splits'] as MovementSplitForNotify[] | undefined;
+  if (!groupId || !paidBy || !splits || splits.length === 0) {
+    return;
+  }
+
+  const firestore = getFirestore();
+  const [groupSnap, payerSnap] = await Promise.all([
+    firestore.collection('groups').doc(groupId).get(),
+    firestore.collection('users').doc(paidBy).get(),
+  ]);
+  const groupName = (groupSnap.data()?.['name'] as string | undefined) ?? 'un grupo';
+  const payerName = (payerSnap.data()?.['displayName'] as string | undefined) || 'Alguien';
+
+  // Cada miembro que quede debiendo recibe la suya, con su propio monto —
+  // nunca una sola notificación agregada para todos. Quien pagó queda
+  // afuera: ya sabe que lo registró.
+  const debtors = splits.filter((split) => split.uid !== paidBy && split.amount > 0);
+  console.log(`[notifySharedExpenseAssigned] ${event.params.movementId}: ${debtors.length} deudor(es) a notificar`);
+
+  await Promise.all(
+    debtors.map((split) =>
+      sendPushNotification(firestore, split.uid, {
+        title: 'Nuevo gasto compartido',
+        body: `${payerName} agregó un gasto en ${groupName}: debes $${split.amount.toLocaleString('es-CO')}`,
+        channelId: GROUP_ACTIVITY_CHANNEL_ID,
+        data: { type: 'group-detail', groupId },
+      })
+    )
+  );
+});

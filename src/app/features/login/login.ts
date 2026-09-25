@@ -2,12 +2,12 @@ import { Component, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { Auth } from '../../core/auth/auth';
-import { Card } from '../../shared/card/card';
 import { ThemeToggle } from '../../shared/theme-toggle/theme-toggle';
+import { APP_VERSION } from '../../../environments/environment';
 
 @Component({
   selector: 'mfx-login',
-  imports: [Card, ThemeToggle],
+  imports: [ThemeToggle],
   templateUrl: './login.html',
   styleUrl: './login.scss',
 })
@@ -15,6 +15,7 @@ export class Login {
   private readonly auth = inject(Auth);
   private readonly router = inject(Router);
 
+  readonly appVersion = APP_VERSION;
   readonly loading = signal(false);
   readonly errorMessage = signal<string | null>(null);
 

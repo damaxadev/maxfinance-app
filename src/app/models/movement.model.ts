@@ -21,7 +21,11 @@ interface BaseMovement {
 }
 
 export interface PersonalMovement extends BaseMovement {
-  groupId: null;
+  // string == etiquetado a un grupo type: 'personal' (Fase 9, ver
+  // DATABASE.md "Gasto en grupo personal") — se crea y se lee igual que un
+  // movimiento sin grupo, groupId solo sirve para agruparlo visualmente,
+  // nunca lleva paidBy/splitType/splits.
+  groupId: string | null;
   accountId: string;
   // Presente solo si este movimiento se generó al convertir un settlement
   // en movimiento personal (ver DATABASE.md, sección de settlements).

@@ -20,6 +20,7 @@
   <mfx-modal [title]="request.mode === 'edit' ? 'Editar movimiento' : 'Agregar movimiento'" (closed)="movementFormState.close()">
     <mfx-movement-form
       [initialValue]="request.mode === 'edit' ? request.movement : null"
+      [groupId]="request.mode === 'create' ? request.groupId : null"
       (saved)="movementFormState.close()"
       (deleted)="movementFormState.close()"
     />
@@ -65,7 +66,10 @@
 }
 
 @if (sharedExpenseFormState.request(); as request) {
-  <mfx-modal title="Gasto compartido" (closed)="sharedExpenseFormState.close()">
+  <mfx-modal
+    [title]="sharedExpenseFormState.isPersonalFlow() ? 'Agregar gasto personal' : 'Gasto compartido'"
+    (closed)="sharedExpenseFormState.close()"
+  >
     <mfx-shared-expense-form [fixedGroupId]="request.groupId" (saved)="sharedExpenseFormState.close()" />
   </mfx-modal>
 }

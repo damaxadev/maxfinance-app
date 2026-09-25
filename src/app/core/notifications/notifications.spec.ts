@@ -5,7 +5,7 @@ import { of } from 'rxjs';
 import { vi } from 'vitest';
 
 import { Auth } from '../auth/auth';
-import { MONTHLY_INSIGHT_CHANNEL_ID, Notifications, RECURRING_PAYMENTS_CHANNEL_ID } from './notifications';
+import { GROUP_ACTIVITY_CHANNEL_ID, MONTHLY_INSIGHT_CHANNEL_ID, Notifications, RECURRING_PAYMENTS_CHANNEL_ID } from './notifications';
 
 vi.mock('@angular/fire/firestore', () => ({
   Firestore: class {},
@@ -159,6 +159,14 @@ describe('Notifications', () => {
       );
     });
 
+    it('creates the fixed group-activity channel', async () => {
+      await service.ensureNotificationChannel();
+
+      expect(FirebaseMessaging.createChannel).toHaveBeenCalledWith(
+        expect.objectContaining({ id: GROUP_ACTIVITY_CHANNEL_ID, importance: Importance.Default })
+      );
+    });
+
     it('never throws even if the platform does not support channels (e.g. web)', async () => {
       vi.mocked(FirebaseMessaging.createChannel).mockRejectedValue(new Error('not supported on web'));
 
@@ -207,6 +215,44 @@ describe('Notifications', () => {
       handler({ notification: {} });
 
       expect(onMessage).toHaveBeenCalledWith({ title: 'MaxFinance', body: '' });
+    });
+  });
+
+  describe('listenForNotificationTaps()', () => {
+    it('registers a notificationActionPerformed listener', () => {
+      service.listenForNotificationTaps(vi.fn());
+
+      expect(FirebaseMessaging.addListener).toHaveBeenCalledWith('notificationActionPerformed', expect.any(Function));
+    });
+
+    it('calls the callback with groupId when the notification carries a group-detail deep link', () => {
+      const onGroupDetailTap = vi.fn();
+      service.listenForNotificationTaps(onGroupDetailTap);
+      const handler = vi.mocked(FirebaseMessaging.addListener).mock.calls[0][1] as (event: unknown) => void;
+
+      handler({ notification: { data: { type: 'group-detail', groupId: 'group1' } } });
+
+      expect(onGroupDetailTap).toHaveBeenCalledWith('group1');
+    });
+
+    it('does nothing for a notification without a group-detail deep link (recurrentes/resumen mensual)', () => {
+      const onGroupDetailTap = vi.fn();
+      service.listenForNotificationTaps(onGroupDetailTap);
+      const handler = vi.mocked(FirebaseMessaging.addListener).mock.calls[0][1] as (event: unknown) => void;
+
+      handler({ notification: {} });
+
+      expect(onGroupDetailTap).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when the data has a different type', () => {
+      const onGroupDetailTap = vi.fn();
+      service.listenForNotificationTaps(onGroupDetailTap);
+      const handler = vi.mocked(FirebaseMessaging.addListener).mock.calls[0][1] as (event: unknown) => void;
+
+      handler({ notification: { data: { type: 'something-else', groupId: 'group1' } } });
+
+      expect(onGroupDetailTap).not.toHaveBeenCalled();
     });
   });
 });

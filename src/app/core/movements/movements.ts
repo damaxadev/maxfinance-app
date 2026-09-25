@@ -78,7 +78,11 @@ export class MovementsService {
     })
   );
 
-  async create(value: MovementFormValue): Promise<void> {
+  // groupId opcional: etiqueta el movimiento a un grupo type: 'personal'
+  // (Fase 9, ver DATABASE.md "Gasto en grupo personal") — sigue siendo un
+  // movimiento personal en todo lo demás (mismo formulario simple, mismo
+  // efecto sobre el balance de la cuenta), solo cambia esta etiqueta.
+  async create(value: MovementFormValue, groupId: string | null = null): Promise<void> {
     const uid = this.requireUid();
     const batch = writeBatch(this.firestore);
 
@@ -91,7 +95,7 @@ export class MovementsService {
       amount: value.amount,
       date: Timestamp.fromDate(value.date),
       note: value.note,
-      groupId: null,
+      groupId,
     };
     batch.set(movementRef, movement);
 

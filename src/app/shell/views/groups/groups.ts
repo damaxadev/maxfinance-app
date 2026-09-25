@@ -73,6 +73,8 @@ export class Groups {
     this.groupDetailState.open(group.id);
   }
 
+  // Siempre el formulario estándar de gasto compartido, sin importar el
+  // type del grupo (ver GroupDetail.addExpense() para el mismo criterio).
   addExpense(group: GroupWithId, event: Event): void {
     event.stopPropagation();
     this.sharedExpenseFormState.openCreate(group.id);

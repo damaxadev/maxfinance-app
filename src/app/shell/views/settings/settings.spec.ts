@@ -1,7 +1,7 @@
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
 
@@ -39,7 +39,10 @@ function configure(
     providers: [
       provideNoopAnimations(),
       provideRouter([]),
-      { provide: Auth, useValue: { currentUser: { uid: 'u1' } } },
+      {
+        provide: Auth,
+        useValue: { currentUser: { uid: 'u1' }, currentUser$: of({ uid: 'u1', displayName: 'Diego', photoUrl: '' }) },
+      },
       { provide: Categories, useValue: { categories$: of(fakeCategories) } },
       { provide: GroupsService, useValue: { groups$: of([]) } },
       { provide: MovementsService, useValue: { combinedMovements$: () => of(opts.movements ?? []) } },
@@ -81,6 +84,20 @@ describe('Settings', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('renders a profile card (avatar + name + chevron) that navigates to /perfil, not a plain text link', () => {
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    const card = fixture.nativeElement.querySelector('.mfx-settings__profile-card');
+    expect(card).toBeTruthy();
+    expect(card.querySelector('.mfx-avatar')).toBeTruthy();
+    expect(card.textContent).toContain('Diego');
+
+    card.click();
+
+    expect(navigateSpy).toHaveBeenCalledWith(['/perfil']);
   });
 
   it('renders the appearance section with the theme toggle', () => {
