@@ -1,0 +1,82 @@
+.mfx-shared-expense-form__people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.mfx-shared-expense-form__person {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 0.5rem;
+  cursor: pointer;
+
+  &--active {
+    border-color: var(--primary);
+  }
+}
+
+.mfx-shared-expense-form__split-types {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.mfx-shared-expense-form__split-type {
+  flex: 1;
+  border: none;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  opacity: 0.7;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.5rem;
+  cursor: pointer;
+
+  &--active {
+    opacity: 1;
+    background: var(--primary);
+    color: var(--bg);
+  }
+}
+
+.mfx-shared-expense-form__breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mfx-shared-expense-form__breakdown-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+
+  span:first-child {
+    flex: 1;
+  }
+
+  input {
+    width: 5rem;
+    font-family: inherit;
+    font-size: 0.95rem;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--mfx-hairline);
+    border-radius: 10px;
+    padding: 0.375rem 0.5rem;
+
+    &:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+  }
+}

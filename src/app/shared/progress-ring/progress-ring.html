@@ -1,0 +1,22 @@
+<svg class="mfx-progress-ring__svg" [attr.width]="size()" [attr.height]="size()" [attr.viewBox]="'0 0 ' + size() + ' ' + size()">
+  <circle
+    class="mfx-progress-ring__track"
+    [attr.cx]="size() / 2"
+    [attr.cy]="size() / 2"
+    [attr.r]="radius()"
+    fill="none"
+    [attr.stroke-width]="strokeWidth()"
+  />
+  <circle
+    class="mfx-progress-ring__fill"
+    [attr.cx]="size() / 2"
+    [attr.cy]="size() / 2"
+    [attr.r]="radius()"
+    fill="none"
+    [attr.stroke-width]="strokeWidth()"
+    [attr.stroke-dasharray]="circumference()"
+    [attr.stroke-dashoffset]="dashOffset()"
+    [style.stroke]="color()"
+  />
+</svg>
+<span class="mfx-progress-ring__label">{{ roundedPercentage() }}%</span>

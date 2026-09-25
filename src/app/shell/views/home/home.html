@@ -1,0 +1,144 @@
+<section class="mfx-view">
+  <h1>Inicio</h1>
+
+  <div class="mfx-home__period">
+    <p class="mfx-home__period-month">{{ monthLabel }}</p>
+    <p class="mfx-home__period-range">{{ monthRangeLabel }}</p>
+  </div>
+
+  <mfx-card class="mfx-gradient-hero mfx-home__hero" [index]="0" (click)="balancesModalState.show()">
+    <p class="mfx-home__hero-label">Balance total</p>
+    <mfx-animated-number class="mfx-home__hero-amount" [value]="totalBalance()" />
+    <p class="mfx-home__hero-hint">Toca para ver el desglose y analizar tus balances →</p>
+  </mfx-card>
+
+  <div class="mfx-home__section-header-row">
+    <button type="button" class="mfx-home__section-header" (click)="activeTabState.requestTab(1)">
+      <h2>Últimos movimientos</h2>
+      <span class="mfx-home__chevron">›</span>
+    </button>
+  </div>
+
+  @if (recentMovements().length === 0) {
+    <mfx-card [index]="1">
+      <p>Todavía no tienes movimientos registrados.</p>
+    </mfx-card>
+  } @else {
+    @for (movement of recentMovements(); track movement.id; let i = $index) {
+      <mfx-card [index]="i + 1">
+        <div class="mfx-home__movement">
+          <div class="mfx-home__movement-info">
+            <span class="mfx-home__icon-badge">{{ movement.categoryIcon }}</span>
+            <div class="mfx-home__movement-text">
+              <span class="mfx-home__movement-name">{{ movement.categoryName }}</span>
+              <span class="mfx-home__movement-tag">
+                {{ movement.dateLabel }}
+                @if (movement.groupName) {
+                  · {{ movement.groupIsShared ? 'Compartido · ' : '' }}{{ movement.groupName }}
+                }
+              </span>
+            </div>
+          </div>
+          <mfx-animated-number
+            [class.mfx-home__amount--income]="movement.type === 'income'"
+            [class.mfx-home__amount--expense]="movement.type === 'expense'"
+            [value]="movement.type === 'income' ? movement.amount : -movement.amount"
+            [showSign]="true"
+          />
+        </div>
+      </mfx-card>
+    }
+  }
+
+  <div class="mfx-home__section-header-row">
+    <button type="button" class="mfx-home__section-header" (click)="activeTabState.requestTab(2)">
+      <h2>Gastos compartidos recientes</h2>
+      <span class="mfx-home__chevron">›</span>
+    </button>
+  </div>
+
+  <mfx-card [index]="4">
+    <mfx-group-activity [groupIds]="sharedGroupIds()" [members]="allMemberProfiles()" [limit]="5" />
+  </mfx-card>
+
+  <div class="mfx-home__section-header-row">
+    <button type="button" class="mfx-home__section-header" (click)="activeTabState.requestTab(3)">
+      <h2>Próximos a vencer</h2>
+      <span class="mfx-home__chevron">›</span>
+    </button>
+  </div>
+
+  @if (upcomingRecurring().length === 0) {
+    <mfx-card [index]="7">
+      <p>No tienes pagos recurrentes activos.</p>
+    </mfx-card>
+  } @else {
+    @for (payment of upcomingRecurring(); track payment.id; let i = $index) {
+      <mfx-card [index]="i + 7">
+        <div class="mfx-home__recurring">
+          <div class="mfx-home__movement-text">
+            <span class="mfx-home__movement-name">{{ payment.name }}</span>
+            <span class="mfx-home__movement-tag">{{ payment.dueLabel }}</span>
+          </div>
+          <mfx-animated-number [value]="payment.amount" />
+        </div>
+      </mfx-card>
+    }
+  }
+
+  <div class="mfx-home__section-header-row">
+    <button type="button" class="mfx-home__section-header" (click)="activeTabState.requestTab(2)">
+      <h2>Tus grupos</h2>
+      <span class="mfx-home__chevron">›</span>
+    </button>
+  </div>
+
+  @if (topGroups().length === 0) {
+    <mfx-card [index]="10">
+      <p>Todavía no perteneces a ningún grupo.</p>
+    </mfx-card>
+  } @else {
+    @for (group of topGroups(); track group.id; let i = $index) {
+      <mfx-card [index]="i + 10" (click)="openGroup(group)">
+        <div class="mfx-home__group">
+          <span class="mfx-home__movement-name">{{ group.name }}</span>
+          <div class="mfx-home__avatars">
+            @for (member of groupMembers(group.id).slice(0, maxStackedAvatars); track member.uid) {
+              <mfx-avatar [photoUrl]="member.photoURL" [displayName]="member.displayName" [size]="28" />
+            }
+            @if (groupMembers(group.id).length > maxStackedAvatars) {
+              <span class="mfx-home__avatar-more">+{{ groupMembers(group.id).length - maxStackedAvatars }}</span>
+            }
+          </div>
+        </div>
+      </mfx-card>
+    }
+  }
+
+  <div class="mfx-home__section-header-row">
+    <h2 class="mfx-home__section-title">Zona de análisis</h2>
+  </div>
+
+  <mfx-card [index]="13">
+    <p class="mfx-home__chart-title">Tendencia mensual</p>
+    <div class="mfx-home__chart-wrap">
+      <canvas #trendCanvas></canvas>
+    </div>
+  </mfx-card>
+
+  @if (hasCategorySpend()) {
+    <mfx-card [index]="14">
+      <p class="mfx-home__chart-title">Gasto por categoría</p>
+      <div class="mfx-home__chart-wrap">
+        <canvas #categoryCanvas></canvas>
+      </div>
+    </mfx-card>
+  }
+
+  <mfx-card class="mfx-home__budget-summary" [index]="15">
+    <div class="mfx-home__budget-summary-row">
+      <p>Presupuesto del mes</p>
+      <mfx-progress-ring [percentage]="budgetUsedPercent()" [color]="budgetRingColor()" [size]="56" [strokeWidth]="6" />
+    </div>
+  </mfx-card>
+</section>

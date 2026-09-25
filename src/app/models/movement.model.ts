@@ -13,7 +13,6 @@ export interface MovementSplit {
 
 interface BaseMovement {
   uid: Uid;
-  accountId: string;
   categoryId: string;
   type: MovementType;
   amount: number;
@@ -22,7 +21,15 @@ interface BaseMovement {
 }
 
 export interface PersonalMovement extends BaseMovement {
-  groupId: null;
+  // string == etiquetado a un grupo type: 'personal' (Fase 9, ver
+  // DATABASE.md "Gasto en grupo personal") — se crea y se lee igual que un
+  // movimiento sin grupo, groupId solo sirve para agruparlo visualmente,
+  // nunca lleva paidBy/splitType/splits.
+  groupId: string | null;
+  accountId: string;
+  // Presente solo si este movimiento se generó al convertir un settlement
+  // en movimiento personal (ver DATABASE.md, sección de settlements).
+  settlementId?: string | null;
 }
 
 export interface SharedMovement extends BaseMovement {
@@ -30,6 +37,11 @@ export interface SharedMovement extends BaseMovement {
   paidBy: Uid;
   splitType: SplitType;
   splits: MovementSplit[];
+  // accountId es opcional acá porque solo tenemos acceso a la cuenta de
+  // quien REGISTRA el movimiento — si paidBy es otro miembro del grupo,
+  // no hay ninguna cuenta suya que se pueda leer/tocar (son siempre
+  // privadas, ver reglas de Firestore), así que queda sin definir.
+  accountId?: string | null;
 }
 
 export type Movement = PersonalMovement | SharedMovement;

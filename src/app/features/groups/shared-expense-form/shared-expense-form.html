@@ -1,0 +1,148 @@
+@if (!groupId()) {
+  <p class="mfx-form__error">Primero crea o únete a un grupo (pestaña Grupos) para registrar un gasto compartido.</p>
+} @else if (membersLoading()) {
+  <p>Cargando miembros del grupo…</p>
+} @else if (membersError()) {
+  <p class="mfx-form__error" role="alert">{{ membersError() }}</p>
+} @else {
+  <form class="mfx-form" [formGroup]="form" (ngSubmit)="submit()">
+    @if (!isPersonalFlow()) {
+      <div class="mfx-form__field">
+        <span>¿Quién pagó?</span>
+        <div class="mfx-shared-expense-form__people">
+          @for (member of members(); track member.uid) {
+            <button
+              type="button"
+              class="mfx-shared-expense-form__person"
+              [class.mfx-shared-expense-form__person--active]="paidByValue() === member.uid"
+              (click)="selectPaidBy(member.uid)"
+            >
+              <mfx-avatar [photoUrl]="member.photoURL" [displayName]="member.displayName" [size]="32" />
+              <span>{{ member.displayName || 'Sin nombre' }}</span>
+            </button>
+          }
+        </div>
+        @if (form.controls.paidBy.invalid && form.controls.paidBy.touched) {
+          <span class="mfx-form__error" role="alert">Selecciona quién pagó.</span>
+        }
+      </div>
+    }
+
+    <label class="mfx-form__field">
+      Monto
+      <input mfxCurrencyInput formControlName="amount" />
+      @if (form.controls.amount.invalid && form.controls.amount.touched) {
+        <span class="mfx-form__error" role="alert">
+          @if (form.controls.amount.hasError('required')) {
+            El monto es obligatorio.
+          } @else if (form.controls.amount.hasError('min')) {
+            El monto debe ser mayor a 0.
+          }
+        </span>
+      }
+    </label>
+
+    @if (needsAccount()) {
+      <label class="mfx-form__field">
+        Cuenta
+        <select formControlName="accountId">
+          <option value="" disabled>Selecciona una cuenta</option>
+          @for (account of accounts(); track account.id) {
+            <option [value]="account.id">{{ account.name }}</option>
+          }
+        </select>
+        @if (form.controls.accountId.invalid && form.controls.accountId.touched) {
+          <span class="mfx-form__error" role="alert">Selecciona una cuenta.</span>
+        }
+      </label>
+    }
+
+    <label class="mfx-form__field">
+      Categoría
+      <select formControlName="categoryId">
+        <option value="" disabled>Selecciona una categoría</option>
+        @for (category of expenseCategories(); track category.id) {
+          <option [value]="category.id">{{ category.icon }} {{ category.name }}</option>
+        }
+      </select>
+      @if (form.controls.categoryId.invalid && form.controls.categoryId.touched) {
+        <span class="mfx-form__error" role="alert">Selecciona una categoría.</span>
+      }
+    </label>
+
+    @if (!isPersonalFlow()) {
+      <div class="mfx-form__field">
+        <span>División</span>
+        <div class="mfx-shared-expense-form__split-types">
+          @for (option of splitTypes; track option.value) {
+            <button
+              type="button"
+              class="mfx-shared-expense-form__split-type"
+              [class.mfx-shared-expense-form__split-type--active]="splitTypeValue() === option.value"
+              (click)="selectSplitType(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          }
+        </div>
+      </div>
+
+      @if (splitTypeValue() === 'equal') {
+        <div class="mfx-shared-expense-form__breakdown">
+          @for (split of equalSplitPreview(); track split.uid) {
+            <div class="mfx-shared-expense-form__breakdown-row">
+              <span>{{ memberName(split.uid) }}</span>
+              <span>{{ split.amount | mfxCurrency }}</span>
+            </div>
+          }
+        </div>
+      } @else {
+        <div class="mfx-shared-expense-form__breakdown">
+          @for (group of splitInputs.controls; track group.controls.uid.value) {
+            <div class="mfx-shared-expense-form__breakdown-row" [formGroup]="group">
+              <span>{{ memberName(group.controls.uid.value) }}</span>
+              @if (splitTypeValue() === 'percentage') {
+                <input type="number" formControlName="value" min="0" step="0.01" />
+                <span>%</span>
+              } @else {
+                <input mfxCurrencyInput formControlName="value" />
+              }
+            </div>
+          }
+        </div>
+        @if (splitMismatch()) {
+          <span class="mfx-form__error" role="alert">
+            @if (splitTypeValue() === 'percentage') {
+              Los porcentajes deben sumar 100% (llevas {{ splitSum() }}%).
+            } @else {
+              Los montos deben sumar {{ splitTarget() | mfxCurrency }} (llevas {{ splitSum() | mfxCurrency }}).
+            }
+          </span>
+        }
+      }
+    }
+
+    <label class="mfx-form__field">
+      Fecha
+      <input type="date" formControlName="date" />
+      @if (form.controls.date.invalid && form.controls.date.touched) {
+        <span class="mfx-form__error" role="alert">La fecha es obligatoria.</span>
+      }
+    </label>
+
+    <label class="mfx-form__field">
+      Nota
+      <textarea formControlName="note" placeholder="Opcional"></textarea>
+    </label>
+
+    @if (errorMessage()) {
+      <p class="mfx-form__error" role="alert">{{ errorMessage() }}</p>
+    }
+
+    <div class="mfx-form__actions">
+      <button type="submit" class="mfx-btn-primary" [disabled]="saving() || form.invalid || splitMismatch()">
+        {{ saving() ? 'Guardando…' : isPersonalFlow() ? 'Agregar gasto' : 'Agregar gasto compartido' }}
+      </button>
+    </div>
+  </form>
+}

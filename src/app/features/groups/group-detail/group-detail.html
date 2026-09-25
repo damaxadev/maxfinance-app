@@ -1,0 +1,165 @@
+@if (group(); as g) {
+  <div class="mfx-group-detail">
+    <div class="mfx-section-header">
+      <h3>{{ g.name }}</h3>
+      <button type="button" class="mfx-section-add" (click)="addExpense()">+ Agregar gasto</button>
+    </div>
+
+    <div class="mfx-section-header">
+      <h4>Miembros</h4>
+    </div>
+
+    @if (membersLoading()) {
+      <p>Cargando miembros…</p>
+    } @else if (membersError()) {
+      <p class="mfx-form__error" role="alert">{{ membersError() }}</p>
+    } @else {
+      @for (member of members(); track member.uid) {
+        <div class="mfx-group-detail__member">
+          <mfx-avatar [photoUrl]="member.photoURL" [displayName]="member.displayName" [size]="32" />
+          <span class="mfx-group-detail__name">{{ member.displayName || 'Sin nombre' }}</span>
+
+          @if (member.uid === currentUid()) {
+            <button type="button" class="mfx-btn-danger" [disabled]="pendingUid() === member.uid" (click)="leave()">
+              {{ pendingUid() === member.uid ? 'Saliendo…' : 'Salir' }}
+            </button>
+          } @else if (canManageGroup()) {
+            <button
+              type="button"
+              class="mfx-btn-danger"
+              [disabled]="pendingUid() === member.uid"
+              (click)="removeMember(member.uid)"
+            >
+              {{ pendingUid() === member.uid ? 'Eliminando…' : 'Eliminar' }}
+            </button>
+          }
+        </div>
+      }
+    }
+
+    @if (actionError()) {
+      <p class="mfx-form__error" role="alert">{{ actionError() }}</p>
+    }
+
+    @if (isSharedGroup()) {
+      <div class="mfx-section-header">
+        <h4>Balance</h4>
+      </div>
+      <mfx-group-balance [groupId]="g.id" [members]="members()" />
+    } @else {
+      <div class="mfx-section-header">
+        <h4>Total gastado</h4>
+      </div>
+      <p class="mfx-group-detail__total-spent">
+        <mfx-animated-number [value]="totalSpent()" />
+      </p>
+    }
+
+    <div class="mfx-section-header">
+      <h4>Actividad reciente</h4>
+    </div>
+    <mfx-group-activity [groupIds]="[g.id]" [members]="members()" />
+
+    @if (isSharedGroup()) {
+      <div class="mfx-section-header">
+        <h4>Invitar</h4>
+        @if (!inviteSectionExpanded()) {
+          <button type="button" class="mfx-section-add" (click)="toggleInviteSection()">+ Invitar miembro</button>
+        } @else {
+          <button type="button" class="mfx-section-add" (click)="toggleInviteSection()">Ocultar</button>
+        }
+      </div>
+
+      @if (inviteSuccess()) {
+        <p class="mfx-form__success">¡Invitación enviada!</p>
+      }
+
+      @if (inviteSectionExpanded()) {
+        @if (suggestedContacts().length > 0) {
+          <div class="mfx-group-detail__contacts">
+            @for (contact of suggestedContacts(); track contact.uid) {
+              <button
+                type="button"
+                class="mfx-group-detail__chip"
+                [disabled]="invitingContactUid() === contact.uid"
+                (click)="inviteContact(contact)"
+              >
+                <mfx-avatar [photoUrl]="contact.photoURL" [displayName]="contact.displayName" [size]="24" />
+                <span>
+                  @if (justInvitedUids().has(contact.uid)) {
+                    Invitado ✓
+                  } @else if (invitingContactUid() === contact.uid) {
+                    Invitando…
+                  } @else {
+                    {{ contact.displayName || 'Sin nombre' }}
+                  }
+                </span>
+              </button>
+            }
+          </div>
+        }
+
+        <form class="mfx-form" [formGroup]="inviteForm" (ngSubmit)="invite()">
+          <label class="mfx-form__field">
+            Correo
+            <input type="email" formControlName="email" placeholder="persona@correo.com" />
+            @if (inviteForm.controls.email.invalid && inviteForm.controls.email.touched) {
+              <span class="mfx-form__error" role="alert">
+                @if (inviteForm.controls.email.hasError('required')) {
+                  El correo es obligatorio.
+                } @else if (inviteForm.controls.email.hasError('email')) {
+                  Ingresa un correo válido.
+                } @else if (inviteForm.controls.email.hasError('selfInvite')) {
+                  No puedes invitarte a ti mismo.
+                } @else if (inviteForm.controls.email.hasError('alreadyMember')) {
+                  Ya es miembro de este grupo.
+                }
+              </span>
+            }
+          </label>
+
+          @if (inviteError()) {
+            <p class="mfx-form__error" role="alert">{{ inviteError() }}</p>
+          }
+
+          <div class="mfx-form__actions">
+            <button type="submit" class="mfx-btn-primary" [disabled]="inviting() || inviteForm.invalid">
+              {{ inviting() ? 'Invitando…' : 'Invitar' }}
+            </button>
+          </div>
+        </form>
+      }
+    }
+
+    @if (canManageGroup()) {
+      <div class="mfx-section-header">
+        <h4>Zona de peligro</h4>
+      </div>
+
+      @if (!confirmingDeleteGroup()) {
+        <button type="button" class="mfx-btn-danger" (click)="confirmDeleteGroup()">Eliminar grupo</button>
+      } @else {
+        <div class="mfx-group-detail__confirm">
+          <p>¿Seguro que quieres eliminar este grupo? Esta acción no se puede deshacer.</p>
+          <div class="mfx-form__actions">
+            <button
+              type="button"
+              class="mfx-group-detail__cancel"
+              [disabled]="deletingGroup()"
+              (click)="cancelDeleteGroup()"
+            >
+              Cancelar
+            </button>
+            <button type="button" class="mfx-btn-danger" [disabled]="deletingGroup()" (click)="deleteGroup()">
+              {{ deletingGroup() ? 'Eliminando…' : 'Sí, eliminar' }}
+            </button>
+          </div>
+        </div>
+      }
+
+      @if (deleteError()) {
+        <p class="mfx-form__error" role="alert">{{ deleteError() }}</p>
+      }
+    }
+  </div>
+}

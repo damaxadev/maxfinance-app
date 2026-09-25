@@ -1,0 +1,15 @@
+<button
+  type="button"
+  role="checkbox"
+  class="mfx-checkbox"
+  [class.mfx-checkbox--checked]="checked()"
+  [attr.aria-checked]="checked()"
+  [disabled]="disabled()"
+  (click)="toggle()"
+>
+  <svg viewBox="0 0 24 24" class="mfx-checkbox__box" aria-hidden="true">
+    <rect x="2" y="2" width="20" height="20" rx="6" class="mfx-checkbox__bg" />
+    <path d="M6 12.5 L10 16.5 L18 7.5" class="mfx-checkbox__check" />
+  </svg>
+  <span class="mfx-checkbox__label"><ng-content /></span>
+</button>

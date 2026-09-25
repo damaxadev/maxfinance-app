@@ -13,3 +13,12 @@ FIREBASE_PROJECT_ID = "maxfinance-app"
 # Set them with `wrangler secret put <NAME>` (see README / .dev.vars.example):
 #   ANTHROPIC_API_KEY  — Anthropic API key used by the /summary endpoint (Fase 7)
 #   INTERNAL_KEY       — shared secret for server-to-server calls from Cloud Functions
+
+# Caché del resultado de IA de /summary — 1 registro por uid, con
+# timestamp, para el límite de "máximo 1 consulta real cada 24h" (ver
+# DESIGN.md, "IA bajo demanda"). id se completa después de correr
+# `wrangler kv namespace create maxfinance-ai-summary-cache` (ver README
+# de este directorio / instrucciones que te dio Claude).
+[[kv_namespaces]]
+binding = "AI_SUMMARY_CACHE"
+id = "6fc9b0cf1b5e4f34b8469f0dc58c1a45"

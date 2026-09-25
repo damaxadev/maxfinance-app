@@ -1,0 +1,32 @@
+@if (edges().length === 0) {
+  <p class="mfx-group-balance__empty">Todo saldado — nadie le debe nada a nadie en este grupo.</p>
+} @else {
+  @for (edge of edges(); track edge.fromUid + edge.toUid) {
+    <div class="mfx-group-balance__row">
+      <div class="mfx-group-balance__people">
+        <mfx-avatar
+          [photoUrl]="memberProfile(edge.fromUid).photoURL"
+          [displayName]="memberProfile(edge.fromUid).displayName"
+          [size]="28"
+        />
+        <span class="mfx-group-balance__names">
+          <strong>{{ memberProfile(edge.fromUid).displayName || 'Alguien' }}</strong>
+          le debe a
+          <strong>{{ memberProfile(edge.toUid).displayName || 'alguien' }}</strong>
+        </span>
+        <mfx-avatar
+          [photoUrl]="memberProfile(edge.toUid).photoURL"
+          [displayName]="memberProfile(edge.toUid).displayName"
+          [size]="28"
+        />
+      </div>
+
+      <div class="mfx-group-balance__action">
+        <mfx-animated-number class="mfx-group-balance__amount" [value]="edge.amount" />
+        @if (canSettle(edge)) {
+          <button type="button" class="mfx-btn-primary" (click)="markAsSettled(edge)">Marcar como saldada</button>
+        }
+      </div>
+    </div>
+  }
+}

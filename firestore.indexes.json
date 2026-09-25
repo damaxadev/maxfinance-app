@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "recurringPayments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "active", "order": "ASCENDING" },
+        { "fieldPath": "nextDate", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

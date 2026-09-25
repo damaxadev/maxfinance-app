@@ -1,0 +1,13 @@
+:host {
+  display: block;
+  background: var(--mfx-card-bg, var(--surface));
+  border-radius: 16px;
+  padding: 1rem;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 120ms ease-out;
+
+  &.mfx-card--pressed {
+    transform: scale(0.97);
+  }
+}

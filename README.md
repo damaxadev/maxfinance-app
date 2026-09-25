@@ -22,6 +22,7 @@ Max Gym Tracker (`my-gym-track-app`) — mismo stack, mismo dueño, apps complet
 
 - [`CLAUDE.md`](./CLAUDE.md) — contexto y convenciones para Claude Code
 - [`DATABASE.md`](./DATABASE.md) — modelo de datos en Firestore
+- [`DESIGN.md`](./DESIGN.md) — sistema de diseño: paleta, tipografía, animaciones
 - [`BACKLOG.md`](./BACKLOG.md) — fases y tareas
 - [`RISKS.md`](./RISKS.md) — riesgos técnicos identificados
 

@@ -1,11 +1,47 @@
 import { TestBed } from '@angular/core/testing';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import { provideRouter } from '@angular/router';
+import { vi } from 'vitest';
+
+import { signal } from '@angular/core';
+
 import { App } from './app';
+import { GroupDetailState } from './core/group-detail-state/group-detail-state';
+import { NotificationBannerState } from './core/notification-banner-state/notification-banner-state';
+import { Notifications } from './core/notifications/notifications';
+import { ThemeService } from './core/theme/theme';
+
+function configure(
+  listenForForegroundMessages: ReturnType<typeof vi.fn>,
+  listenForNotificationTaps: ReturnType<typeof vi.fn> = vi.fn()
+) {
+  return TestBed.configureTestingModule({
+    imports: [App],
+    providers: [
+      provideRouter([]),
+      provideNoopAnimations(),
+      {
+        provide: Notifications,
+        useValue: {
+          ensureNotificationChannel: vi.fn().mockResolvedValue(undefined),
+          listenForForegroundMessages,
+          listenForNotificationTaps,
+        },
+      },
+      // ThemeService se inyecta al arrancar la app — se stubea acá para no
+      // depender de @capacitor/preferences real; su comportamiento se
+      // prueba en theme.spec.ts.
+      { provide: ThemeService, useValue: { theme: signal('dark').asReadonly(), toggle: vi.fn().mockResolvedValue(undefined) } },
+    ],
+  }).compileComponents();
+}
 
 describe('App', () => {
+  let listenForForegroundMessages: ReturnType<typeof vi.fn>;
+
   beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [App],
-    }).compileComponents();
+    listenForForegroundMessages = vi.fn();
+    await configure(listenForForegroundMessages);
   });
 
   it('should create the app', () => {
@@ -14,10 +50,56 @@ describe('App', () => {
     expect(app).toBeTruthy();
   });
 
-  it('should render title', async () => {
+  it('renders the router outlet', () => {
     const fixture = TestBed.createComponent(App);
-    await fixture.whenStable();
+    fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('MaxFinance');
+    expect(compiled.querySelector('router-outlet')).toBeTruthy();
+  });
+
+  it('sets up the notification channel and the foreground listener on startup', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    expect(listenForForegroundMessages).toHaveBeenCalledWith(expect.any(Function));
+  });
+
+  it('registers a tap listener that opens the tapped group in GroupDetailState', async () => {
+    const listenForNotificationTaps = vi.fn();
+    TestBed.resetTestingModule();
+    await configure(vi.fn(), listenForNotificationTaps);
+
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    expect(listenForNotificationTaps).toHaveBeenCalledWith(expect.any(Function));
+    const onGroupDetailTap = listenForNotificationTaps.mock.calls[0][0] as (groupId: string) => void;
+
+    onGroupDetailTap('group1');
+
+    expect(TestBed.inject(GroupDetailState).groupId()).toBe('group1');
+  });
+
+  it('shows a toast when a foreground notification arrives, and dismisses it', async () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const onMessage = listenForForegroundMessages.mock.calls[0][0] as (n: { title: string; body: string }) => void;
+
+    onMessage({ title: 'Pago recurrente procesado', body: 'Netflix: $70.000' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('mfx-toast')).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain('Netflix: $70.000');
+
+    const bannerState = TestBed.inject(NotificationBannerState);
+    bannerState.dismiss();
+    fixture.detectChanges();
+    // La transición :leave (aunque sea "noop", duración 0) todavía completa
+    // de forma async — hay que dejar que el ciclo de animación termine
+    // antes de que el elemento salga realmente del DOM.
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('mfx-toast')).toBeFalsy();
   });
 });

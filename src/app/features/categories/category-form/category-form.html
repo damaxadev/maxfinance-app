@@ -1,0 +1,53 @@
+<form class="mfx-form" [formGroup]="form" (ngSubmit)="submit()">
+  <div class="mfx-form__row">
+    <label class="mfx-form__field" style="flex: 0 0 5rem;">
+      Ícono
+      <select formControlName="icon">
+        @for (icon of categoryIcons; track icon) {
+          <option [value]="icon">{{ icon }}</option>
+        }
+      </select>
+      @if (form.controls.icon.invalid && form.controls.icon.touched) {
+        <span class="mfx-form__error" role="alert">El ícono es obligatorio.</span>
+      }
+    </label>
+
+    <label class="mfx-form__field">
+      Nombre
+      <input type="text" formControlName="name" placeholder="Ej. Mascotas" />
+      @if (form.controls.name.invalid && form.controls.name.touched) {
+        <span class="mfx-form__error" role="alert">
+          @if (form.controls.name.hasError('required')) {
+            El nombre es obligatorio.
+          } @else if (form.controls.name.hasError('minlength')) {
+            El nombre debe tener al menos 2 caracteres.
+          }
+        </span>
+      }
+    </label>
+  </div>
+
+  <label class="mfx-form__field">
+    Tipo
+    <select formControlName="type">
+      @for (option of categoryTypes; track option.value) {
+        <option [value]="option.value">{{ option.label }}</option>
+      }
+    </select>
+  </label>
+
+  @if (errorMessage()) {
+    <p class="mfx-form__error" role="alert">{{ errorMessage() }}</p>
+  }
+
+  <div class="mfx-form__actions">
+    @if (initialValue()) {
+      <button type="button" class="mfx-btn-danger" [disabled]="saving() || deleting()" (click)="remove()">
+        {{ deleting() ? 'Eliminando…' : 'Eliminar' }}
+      </button>
+    }
+    <button type="submit" class="mfx-btn-primary" [disabled]="saving() || deleting()">
+      {{ saving() ? 'Guardando…' : initialValue() ? 'Guardar cambios' : 'Crear categoría' }}
+    </button>
+  </div>
+</form>

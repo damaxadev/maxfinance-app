@@ -1,0 +1,13 @@
+<nav class="mfx-tab-bar">
+  @for (tab of tabs; track tab.label; let i = $index) {
+    <button
+      type="button"
+      class="mfx-tab-bar__item"
+      [class.mfx-tab-bar__item--active]="i === activeIndex()"
+      (click)="selectTab(i)"
+    >
+      <span class="mfx-tab-bar__icon" aria-hidden="true">{{ tab.icon }}</span>
+      {{ tab.label }}
+    </button>
+  }
+</nav>

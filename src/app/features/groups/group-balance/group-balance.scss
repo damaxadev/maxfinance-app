@@ -1,0 +1,40 @@
+.mfx-group-balance__empty {
+  margin: 0;
+  opacity: 0.7;
+  font-size: 0.875rem;
+}
+
+.mfx-group-balance__row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.625rem 0;
+  border-bottom: 1px solid var(--mfx-hairline-subtle);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.mfx-group-balance__people {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mfx-group-balance__names {
+  flex: 1;
+  font-size: 0.875rem;
+}
+
+.mfx-group-balance__action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.mfx-group-balance__amount {
+  font-weight: 700;
+  color: var(--danger);
+}

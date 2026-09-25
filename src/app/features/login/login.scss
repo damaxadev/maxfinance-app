@@ -1,0 +1,170 @@
+.mfx-login {
+  position: relative;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+// Fondo animado con el gradiente de marca (--primary -> --accent, ver
+// DESIGN.md "Login") — dos manchas grandes, borrosas y semitransparentes
+// que se mueven lento en direcciones opuestas. Sutil a propósito: nunca
+// compite con la tarjeta de login, que queda encima (z-index).
+.mfx-login__bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+
+  &::before,
+  &::after {
+    content: '';
+    position: absolute;
+    width: 60vmax;
+    height: 60vmax;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.35;
+  }
+
+  &::before {
+    top: -20vmax;
+    left: -15vmax;
+    background: var(--primary);
+    animation: mfx-login-blob-a 18s ease-in-out infinite;
+  }
+
+  &::after {
+    bottom: -25vmax;
+    right: -15vmax;
+    background: var(--accent);
+    animation: mfx-login-blob-b 22s ease-in-out infinite;
+  }
+}
+
+@keyframes mfx-login-blob-a {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(8vmax, 6vmax) scale(1.15);
+  }
+}
+
+@keyframes mfx-login-blob-b {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-6vmax, -8vmax) scale(1.1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mfx-login__bg::before,
+  .mfx-login__bg::after {
+    animation: none;
+  }
+}
+
+.mfx-login__theme-toggle {
+  position: absolute;
+  z-index: 1;
+  top: 1.25rem;
+  right: 1.25rem;
+}
+
+// Sin caja de fondo: el título/subtítulo flotan directo sobre el gradiente
+// animado (ver .mfx-login__bg) — por eso llevan text-shadow, para no
+// perderse cuando caen sobre la zona más clara del gradiente.
+.mfx-login__intro {
+  position: absolute;
+  z-index: 1;
+  top: 16%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 400px;
+  padding: 0 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  text-align: center;
+
+  h1 {
+    margin: 0;
+    font-size: 2.75rem;
+    color: var(--text);
+    text-shadow: 0 2px 16px rgba(6, 11, 20, 0.35);
+  }
+
+  p {
+    margin: 0;
+    color: var(--text);
+    opacity: 0.85;
+    text-shadow: 0 1px 10px rgba(6, 11, 20, 0.3);
+  }
+}
+
+// Ubicado donde el gradiente pasa de verde a dorado (~60-65% de la
+// altura) — ver DESIGN.md "Login".
+.mfx-login__action {
+  position: absolute;
+  z-index: 1;
+  top: 62%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  max-width: 360px;
+  padding: 0 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: center;
+}
+
+.mfx-login__credit {
+  position: absolute;
+  z-index: 1;
+  bottom: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  font-size: 11px;
+  color: var(--text);
+  opacity: 0.5;
+  text-align: center;
+}
+
+.mfx-google-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  border: none;
+  border-radius: 999px;
+  background: #fff;
+  color: #1f1f1f;
+  padding: 0.75rem 1.5rem;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 150ms ease-out;
+
+  &:not(:disabled):hover {
+    opacity: 0.9;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+}
+
+.mfx-login__error {
+  margin: 0;
+  color: var(--danger);
+}

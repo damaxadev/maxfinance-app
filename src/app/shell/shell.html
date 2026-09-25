@@ -1,0 +1,100 @@
+<div class="mfx-shell">
+  <swiper-container #swiperEl class="mfx-shell__swiper" speed="350">
+    <swiper-slide><mfx-home /></swiper-slide>
+    <swiper-slide><mfx-movements /></swiper-slide>
+    <swiper-slide><mfx-groups /></swiper-slide>
+    <swiper-slide><mfx-recurring /></swiper-slide>
+    <swiper-slide><mfx-settings /></swiper-slide>
+  </swiper-container>
+
+  <mfx-tab-bar [activeIndex]="activeIndex()" (tabSelected)="onTabSelected($event)" />
+  <mfx-fab
+    (movementRequested)="movementFormState.openCreate()"
+    (groupRequested)="groupFormState.openCreate()"
+    (sharedExpenseRequested)="sharedExpenseFormState.openCreate()"
+    (recurringRequested)="recurringPaymentFormState.openCreate()"
+  />
+</div>
+
+@if (movementFormState.request(); as request) {
+  <mfx-modal [title]="request.mode === 'edit' ? 'Editar movimiento' : 'Agregar movimiento'" (closed)="movementFormState.close()">
+    <mfx-movement-form
+      [initialValue]="request.mode === 'edit' ? request.movement : null"
+      [groupId]="request.mode === 'create' ? request.groupId : null"
+      (saved)="movementFormState.close()"
+      (deleted)="movementFormState.close()"
+    />
+  </mfx-modal>
+}
+
+@if (accountFormState.request(); as request) {
+  <mfx-modal [title]="request.mode === 'edit' ? 'Editar cuenta' : 'Nueva cuenta'" (closed)="accountFormState.close()">
+    <mfx-account-form
+      [initialValue]="request.mode === 'edit' ? request.account : null"
+      (saved)="accountFormState.close()"
+      (deleted)="accountFormState.close()"
+    />
+  </mfx-modal>
+}
+
+@if (categoryFormState.request(); as request) {
+  <mfx-modal [title]="request.mode === 'edit' ? 'Editar categoría' : 'Nueva categoría'" (closed)="categoryFormState.close()">
+    <mfx-category-form
+      [initialValue]="request.mode === 'edit' ? request.category : null"
+      (saved)="categoryFormState.close($event)"
+      (deleted)="categoryFormState.close()"
+    />
+  </mfx-modal>
+}
+
+@if (groupFormState.open()) {
+  <mfx-modal title="Nuevo grupo" (closed)="groupFormState.close()">
+    <mfx-group-form (saved)="groupFormState.close()" />
+  </mfx-modal>
+}
+
+@if (groupDetailState.groupId(); as groupId) {
+  <mfx-modal title="Grupo" (closed)="groupDetailState.close()">
+    <mfx-group-detail [groupId]="groupId" (left)="groupDetailState.close()" />
+  </mfx-modal>
+}
+
+@if (groupActivityFullState.groupId(); as groupId) {
+  <mfx-modal title="Actividad del grupo" (closed)="groupActivityFullState.close()">
+    <mfx-group-activity-full [groupId]="groupId" />
+  </mfx-modal>
+}
+
+@if (sharedExpenseFormState.request(); as request) {
+  <mfx-modal
+    [title]="sharedExpenseFormState.isPersonalFlow() ? 'Agregar gasto personal' : 'Gasto compartido'"
+    (closed)="sharedExpenseFormState.close()"
+  >
+    <mfx-shared-expense-form [fixedGroupId]="request.groupId" (saved)="sharedExpenseFormState.close()" />
+  </mfx-modal>
+}
+
+@if (settlementFormState.context(); as context) {
+  <mfx-modal title="Marcar como saldada" (closed)="settlementFormState.close()">
+    <mfx-settlement-form [context]="context" (saved)="settlementFormState.close()" />
+  </mfx-modal>
+}
+
+@if (recurringPaymentFormState.request(); as request) {
+  <mfx-modal
+    [title]="request.mode === 'edit' ? 'Editar pago recurrente' : 'Nuevo pago recurrente'"
+    (closed)="recurringPaymentFormState.close()"
+  >
+    <mfx-recurring-payment-form
+      [initialValue]="request.mode === 'edit' ? request.payment : null"
+      (saved)="recurringPaymentFormState.close()"
+      (deleted)="recurringPaymentFormState.close()"
+    />
+  </mfx-modal>
+}
+
+@if (balancesModalState.open()) {
+  <mfx-modal title="Balances" (closed)="balancesModalState.close()">
+    <mfx-balances-modal />
+  </mfx-modal>
+}

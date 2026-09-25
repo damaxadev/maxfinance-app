@@ -8,4 +8,10 @@ export interface User {
   email: string;
   photoURL: string;
   createdAt: Timestamp;
+  // Tokens de Cloud Messaging de cada dispositivo/navegador donde el usuario
+  // inició sesión — arreglo (no un solo valor) para no perder notificaciones
+  // al usar más de un dispositivo. Ver Notifications, Fase 6.
+  fcmTokens?: string[];
+  // Opcional, editable desde Perfil (Fase 9).
+  phone?: string | null;
 }

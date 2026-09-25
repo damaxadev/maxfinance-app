@@ -1,6 +1,5 @@
-<main class="mfx-placeholder">
-  <h1>MaxFinance</h1>
-  <p>Estamos construyendo la app. ¡Vuelve pronto!</p>
-</main>
-
 <router-outlet />
+
+@if (notificationBannerState.banner(); as banner) {
+  <mfx-toast [title]="banner.title" [body]="banner.body" (dismissed)="notificationBannerState.dismiss()" />
+}

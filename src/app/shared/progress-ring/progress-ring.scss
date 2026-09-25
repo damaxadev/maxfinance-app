@@ -1,0 +1,28 @@
+:host {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+
+.mfx-progress-ring__svg {
+  transform: rotate(-90deg);
+}
+
+.mfx-progress-ring__track {
+  stroke: var(--surface);
+}
+
+.mfx-progress-ring__fill {
+  // butt (corte recto), no round: con el arco casi completo (80-95%), las
+  // dos puntas de un trazo con linecap redondeado casi se tocan y forman
+  // una protuberancia en vez de un corte limpio entre relleno y espacio
+  // vacío — se nota en cualquier categoría al acercarse al límite.
+  stroke-linecap: butt;
+  transition: stroke-dashoffset 800ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mfx-progress-ring__label {
+  position: absolute;
+  font-weight: 600;
+  color: var(--text);
+}

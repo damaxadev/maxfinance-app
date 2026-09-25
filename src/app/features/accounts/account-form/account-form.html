@@ -1,0 +1,30 @@
+<form class="mfx-form" [formGroup]="form" (ngSubmit)="submit()">
+  <label class="mfx-form__field">
+    Nombre
+    <input type="text" formControlName="name" placeholder="Ej. Cuenta de ahorros" />
+  </label>
+
+  <label class="mfx-form__field">
+    Tipo
+    <select formControlName="type">
+      @for (option of accountTypes; track option.value) {
+        <option [value]="option.value">{{ option.label }}</option>
+      }
+    </select>
+  </label>
+
+  @if (errorMessage()) {
+    <p class="mfx-form__error" role="alert">{{ errorMessage() }}</p>
+  }
+
+  <div class="mfx-form__actions">
+    @if (initialValue()) {
+      <button type="button" class="mfx-btn-danger" [disabled]="saving() || deleting()" (click)="remove()">
+        {{ deleting() ? 'Eliminando…' : 'Eliminar' }}
+      </button>
+    }
+    <button type="submit" class="mfx-btn-primary" [disabled]="saving() || deleting()">
+      {{ saving() ? 'Guardando…' : initialValue() ? 'Guardar cambios' : 'Crear cuenta' }}
+    </button>
+  </div>
+</form>

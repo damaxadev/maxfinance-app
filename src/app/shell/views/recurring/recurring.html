@@ -1,0 +1,37 @@
+<section class="mfx-view">
+  <h1>Recurrentes</h1>
+
+  <div class="mfx-section-header">
+    <h2>Notificaciones</h2>
+  </div>
+
+  <mfx-card [index]="0">
+    <mfx-checkbox [formControl]="notificationsControl">Activar notificaciones de pagos recurrentes</mfx-checkbox>
+    @if (notificationsMessage()) {
+      <p class="mfx-form__success">{{ notificationsMessage() }}</p>
+    }
+  </mfx-card>
+
+  <div class="mfx-section-header">
+    <h2>Pagos recurrentes</h2>
+    <button type="button" class="mfx-section-add" (click)="openCreateRecurring()">+ Recurrente</button>
+  </div>
+
+  @if (recurringPayments().length === 0) {
+    <mfx-card [index]="1">
+      <p>No tienes pagos recurrentes todavía.</p>
+    </mfx-card>
+  } @else {
+    @for (payment of recurringPayments(); track payment.id; let i = $index) {
+      <mfx-card [index]="i + 1" (click)="openEditRecurring(payment)">
+        <div class="mfx-recurring__row">
+          <span>{{ payment.name }}</span>
+          <span class="mfx-recurring__status" [class.mfx-recurring__status--inactive]="!payment.active">
+            {{ payment.active ? 'Activo' : 'Inactivo' }}
+          </span>
+          <mfx-animated-number [value]="payment.amount" />
+        </div>
+      </mfx-card>
+    }
+  }
+</section>

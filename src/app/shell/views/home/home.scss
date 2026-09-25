@@ -1,0 +1,176 @@
+.mfx-home__period {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.mfx-home__period-month {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.mfx-home__period-range {
+  margin: 0;
+  font-size: 0.85rem;
+  opacity: 0.65;
+}
+
+.mfx-home__hero {
+  color: var(--bg);
+}
+
+.mfx-home__hero-label {
+  margin: 0 0 0.25rem;
+  opacity: 0.75;
+}
+
+.mfx-home__hero-amount {
+  display: block;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.mfx-home__hero-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
+.mfx-home__section-header-row {
+  margin-top: 0.25rem;
+}
+
+.mfx-home__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  padding: 0;
+  cursor: pointer;
+
+  h2 {
+    margin: 0;
+  }
+}
+
+.mfx-home__section-title {
+  margin: 0;
+  color: var(--text);
+}
+
+.mfx-home__chevron {
+  opacity: 0.5;
+  font-size: 1.25rem;
+}
+
+.mfx-home__movement,
+.mfx-home__recurring,
+.mfx-home__group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.mfx-home__movement-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.mfx-home__icon-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: var(--bg);
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.mfx-home__movement-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.mfx-home__movement-name {
+  font-weight: 600;
+}
+
+.mfx-home__movement-tag {
+  font-size: 0.75rem;
+  opacity: 0.65;
+}
+
+.mfx-home__amount--income {
+  color: var(--primary);
+}
+
+.mfx-home__amount--expense {
+  color: var(--danger);
+}
+
+// Los dos usos en "Gastos compartidos recientes" ("Te deben $X en total" /
+// "Le debes $X a...") son texto, no mfx-animated-number — más largos que un
+// monto suelto, así que se alinean a la derecha y se les da algo de ancho
+// máximo para no aplastar la columna de categoría/grupo.
+.mfx-home__movement > .mfx-home__amount--income,
+.mfx-home__movement > .mfx-home__amount--expense {
+  flex-shrink: 0;
+  max-width: 40%;
+  font-size: 0.85rem;
+  text-align: right;
+}
+
+.mfx-home__avatars {
+  display: flex;
+  align-items: center;
+
+  mfx-avatar {
+    margin-left: -0.5rem;
+    border: 2px solid var(--surface);
+    border-radius: 50%;
+
+    &:first-child {
+      margin-left: 0;
+    }
+  }
+}
+
+.mfx-home__avatar-more {
+  margin-left: 0.25rem;
+  font-size: 0.75rem;
+  opacity: 0.65;
+}
+
+.mfx-home__chart-title {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+}
+
+.mfx-home__chart-wrap {
+  position: relative;
+  height: 180px;
+}
+
+.mfx-home__budget-summary {
+  opacity: 0.85;
+}
+
+.mfx-home__budget-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  p {
+    margin: 0;
+  }
+}

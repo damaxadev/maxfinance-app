@@ -1,0 +1,81 @@
+<section class="mfx-view">
+  <h1>Movimientos</h1>
+
+  <div class="mfx-section-header">
+    <h2>Cuentas</h2>
+    <button type="button" class="mfx-section-add" (click)="openCreateAccount()">+ Cuenta</button>
+  </div>
+
+  @if (accounts().length === 0) {
+    <mfx-card [index]="0">
+      <p>No tienes cuentas todavía. Crea la primera para empezar a registrar movimientos.</p>
+    </mfx-card>
+  } @else {
+    @for (account of accounts(); track account.id; let i = $index) {
+      <mfx-card [index]="i" (click)="openEditAccount(account)">
+        <div class="mfx-movements__account">
+          <span>{{ accountTypeLabel(account.type) }} · {{ account.name }}</span>
+          <mfx-animated-number [value]="account.balance" />
+        </div>
+      </mfx-card>
+    }
+  }
+
+  <h2>Movimientos</h2>
+
+  <div class="mfx-movements__filters">
+    <select [value]="filterAccountId()" (change)="filterAccountId.set($any($event.target).value)">
+      <option value="">Todas las cuentas</option>
+      @for (account of accounts(); track account.id) {
+        <option [value]="account.id">{{ account.name }}</option>
+      }
+    </select>
+
+    <select [value]="filterCategoryId()" (change)="filterCategoryId.set($any($event.target).value)">
+      <option value="">Todas las categorías</option>
+      @for (category of categories(); track category.id) {
+        <option [value]="category.id">{{ category.icon }} {{ category.name }}</option>
+      }
+    </select>
+
+    <input
+      type="date"
+      [value]="filterFrom()"
+      (change)="filterFrom.set($any($event.target).value)"
+      aria-label="Desde"
+    />
+    <input type="date" [value]="filterTo()" (change)="filterTo.set($any($event.target).value)" aria-label="Hasta" />
+  </div>
+
+  @if (filteredMovements().length === 0) {
+    <mfx-card [index]="0">
+      <p>No hay movimientos que coincidan con estos filtros.</p>
+    </mfx-card>
+  } @else {
+    @for (movement of filteredMovements(); track movement.id; let i = $index) {
+      <mfx-card [index]="i" (click)="editMovement(movement)">
+        <div class="mfx-movements__item">
+          <div class="mfx-movements__item-info">
+            <span class="mfx-movements__icon-badge">{{ categoryIcon(movement.categoryId) }}</span>
+            <div class="mfx-movements__item-text">
+              <span class="mfx-movements__category-name">{{ categoryName(movement.categoryId) }}</span>
+              @if (movement.groupName) {
+                <span class="mfx-movements__item-tag">
+                  {{ movement.groupIsShared ? 'Compartido · ' : '' }}{{ movement.groupName }} · {{ formatDate(movement.date) }}
+                </span>
+              } @else {
+                <span class="mfx-movements__item-account">{{ accountName(movement.accountId ?? '') }} · {{ formatDate(movement.date) }}</span>
+              }
+            </div>
+          </div>
+          <mfx-animated-number
+            [class.mfx-movements__amount--income]="movement.type === 'income'"
+            [class.mfx-movements__amount--expense]="movement.type === 'expense'"
+            [value]="movement.type === 'income' ? movement.amount : -movement.amount"
+            [showSign]="true"
+          />
+        </div>
+      </mfx-card>
+    }
+  }
+</section>
