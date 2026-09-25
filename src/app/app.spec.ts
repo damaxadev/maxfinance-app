@@ -3,9 +3,12 @@ import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
 import { vi } from 'vitest';
 
+import { signal } from '@angular/core';
+
 import { App } from './app';
 import { NotificationBannerState } from './core/notification-banner-state/notification-banner-state';
 import { Notifications } from './core/notifications/notifications';
+import { ThemeService } from './core/theme/theme';
 
 function configure(listenForForegroundMessages: ReturnType<typeof vi.fn>) {
   return TestBed.configureTestingModule({
@@ -17,6 +20,10 @@ function configure(listenForForegroundMessages: ReturnType<typeof vi.fn>) {
         provide: Notifications,
         useValue: { ensureNotificationChannel: vi.fn().mockResolvedValue(undefined), listenForForegroundMessages },
       },
+      // ThemeService se inyecta al arrancar la app — se stubea acá para no
+      // depender de @capacitor/preferences real; su comportamiento se
+      // prueba en theme.spec.ts.
+      { provide: ThemeService, useValue: { theme: signal('dark').asReadonly(), toggle: vi.fn().mockResolvedValue(undefined) } },
     ],
   }).compileComponents();
 }

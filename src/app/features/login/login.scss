@@ -1,9 +1,16 @@
 .mfx-login {
+  position: relative;
   min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
+}
+
+.mfx-login__theme-toggle {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
 }
 
 .mfx-login__card {

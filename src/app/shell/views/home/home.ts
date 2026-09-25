@@ -23,6 +23,7 @@ import { GroupDetailState } from '../../../core/group-detail-state/group-detail-
 import { GroupsService, type GroupMemberProfile, type GroupWithId } from '../../../core/groups/groups';
 import { MovementsService } from '../../../core/movements/movements';
 import { RecurringPayments } from '../../../core/recurring-payments/recurring-payments';
+import { ThemeService } from '../../../core/theme/theme';
 import type { MovementType } from '../../../models/movement.model';
 import { GroupActivity } from '../../../features/groups/group-activity/group-activity';
 
@@ -30,7 +31,27 @@ Chart.register(...registerables);
 
 const MAX_STACKED_AVATARS = 3;
 const TREND_MONTHS = 6;
-const CHART_COLORS = ['#00E6A8', '#FFD166', '#FF6B6B', '#5AC8FA', '#B388FF', '#FF8FB1'];
+// Extras decorativos para categorías más allá de primary/accent/danger (que
+// se resuelven en vivo desde los tokens, ver resolvedColor()) — no son parte
+// de la paleta con nombre de DESIGN.md, así que se quedan fijos en ambos modos.
+const EXTRA_CHART_COLORS = ['#5AC8FA', '#B388FF', '#FF8FB1'];
+
+// Chart.js dibuja en <canvas> vía opciones JS, no CSS — nunca hereda los
+// custom properties del tema por su cuenta. Hay que leer el valor YA
+// resuelto (getComputedStyle, no el nombre de la variable) cada vez que se
+// (re)construyen las opciones de color, y reconstruir cuando el tema cambie
+// en vivo (ver ThemeService en el constructor de Home).
+function resolvedColor(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const clean = hex.replace('#', '');
+  const r = parseInt(clean.substring(0, 2), 16);
+  const g = parseInt(clean.substring(2, 4), 16);
+  const b = parseInt(clean.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 interface HomeMovementItem {
   id: string;
@@ -92,6 +113,7 @@ export class Home {
   private readonly groupsService = inject(GroupsService);
   private readonly recurringPaymentsService = inject(RecurringPayments);
   private readonly auth = inject(Auth);
+  private readonly themeService = inject(ThemeService);
 
   readonly activeTabState = inject(ActiveTabState);
   readonly balancesModalState = inject(BalancesModalState);
@@ -193,8 +215,8 @@ export class Home {
   // creación/actualización imperativa de los <canvas>.
   private readonly trendCanvas = viewChild<ElementRef<HTMLCanvasElement>>('trendCanvas');
   private readonly categoryCanvas = viewChild<ElementRef<HTMLCanvasElement>>('categoryCanvas');
-  private trendChart: Chart | null = null;
-  private categoryChart: Chart | null = null;
+  private trendChart: Chart<'line'> | null = null;
+  private categoryChart: Chart<'doughnut'> | null = null;
 
   readonly monthlyTrend = computed(() => sumExpensesByMonth(this.movements(), this.currentUid() ?? '', this.today, TREND_MONTHS));
 
@@ -227,15 +249,33 @@ export class Home {
     effect(() => {
       const canvas = this.trendCanvas()?.nativeElement;
       const data = this.monthlyTrend();
+      // Leída a propósito (sin usarla directo): registra el tema como
+      // dependencia del effect, así se reconstruyen los colores cuando el
+      // usuario cambia de modo en vivo, no solo la primera vez que carga.
+      this.themeService.theme();
       if (!canvas) {
         return;
       }
       const labels = data.map((entry) => capitalize(new Intl.DateTimeFormat('es-CO', { month: 'short' }).format(monthKeyToDate(entry.month))));
       const values = data.map((entry) => entry.total);
 
+      // Chart.js pinta en <canvas> vía opciones JS, no CSS — nunca hereda
+      // los custom properties del tema por su cuenta. Hay que leer el valor
+      // YA RESUELTO (no el nombre de la variable) cada vez.
+      const textColor = resolvedColor('--text');
+      const primaryColor = resolvedColor('--primary');
+      const gridColor = resolvedColor('--mfx-hairline-subtle');
+
       if (this.trendChart) {
         this.trendChart.data.labels = labels;
         this.trendChart.data.datasets[0].data = values;
+        this.trendChart.data.datasets[0].borderColor = primaryColor;
+        this.trendChart.data.datasets[0].backgroundColor = hexToRgba(primaryColor, 0.15);
+        this.trendChart.data.datasets[0].pointBackgroundColor = primaryColor;
+        this.trendChart.options.scales = {
+          x: { ticks: { color: textColor }, grid: { color: gridColor } },
+          y: { ticks: { color: textColor }, grid: { color: gridColor }, beginAtZero: true },
+        };
         this.trendChart.update();
         return;
       }
@@ -246,11 +286,11 @@ export class Home {
           datasets: [
             {
               data: values,
-              borderColor: '#00E6A8',
-              backgroundColor: 'rgba(0, 230, 168, 0.15)',
+              borderColor: primaryColor,
+              backgroundColor: hexToRgba(primaryColor, 0.15),
               fill: true,
               tension: 0.35,
-              pointBackgroundColor: '#00E6A8',
+              pointBackgroundColor: primaryColor,
             },
           ],
         },
@@ -259,8 +299,8 @@ export class Home {
           maintainAspectRatio: false,
           plugins: { legend: { display: false } },
           scales: {
-            x: { ticks: { color: '#F5F7FA' }, grid: { color: 'rgba(245, 247, 250, 0.08)' } },
-            y: { ticks: { color: '#F5F7FA' }, grid: { color: 'rgba(245, 247, 250, 0.08)' }, beginAtZero: true },
+            x: { ticks: { color: textColor }, grid: { color: gridColor } },
+            y: { ticks: { color: textColor }, grid: { color: gridColor }, beginAtZero: true },
           },
         },
       });
@@ -269,17 +309,28 @@ export class Home {
     effect(() => {
       const canvas = this.categoryCanvas()?.nativeElement;
       const entries = this.categorySpend();
+      this.themeService.theme(); // misma razón que en el efecto de arriba
       if (!canvas || entries.length === 0) {
         return;
       }
       const labels = entries.map((entry) => entry.label);
       const values = entries.map((entry) => entry.total);
-      const colors = entries.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]);
+      const chartColors = [
+        resolvedColor('--primary'),
+        resolvedColor('--accent'),
+        resolvedColor('--danger'),
+        ...EXTRA_CHART_COLORS,
+      ];
+      const colors = entries.map((_, i) => chartColors[i % chartColors.length]);
+      const textColor = resolvedColor('--text');
 
       if (this.categoryChart) {
         this.categoryChart.data.labels = labels;
         this.categoryChart.data.datasets[0].data = values;
         this.categoryChart.data.datasets[0].backgroundColor = colors;
+        this.categoryChart.options.plugins = {
+          legend: { position: 'bottom', labels: { color: textColor, boxWidth: 12 } },
+        };
         this.categoryChart.update();
         return;
       }
@@ -289,7 +340,7 @@ export class Home {
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: { legend: { position: 'bottom', labels: { color: '#F5F7FA', boxWidth: 12 } } },
+          plugins: { legend: { position: 'bottom', labels: { color: textColor, boxWidth: 12 } } },
         },
       });
     });

@@ -29,7 +29,7 @@
 
 .mfx-checkbox__bg {
   fill: var(--bg);
-  stroke: rgba(245, 247, 250, 0.3);
+  stroke: var(--mfx-hairline-strong);
   stroke-width: 2;
   transition: fill 200ms ease-out, stroke 200ms ease-out;
 }

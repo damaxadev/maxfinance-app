@@ -13,7 +13,39 @@
   --danger: #ff6b6b;
   --text: #f5f7fa;
 
+  // Bordes/divisores sutiles (inputs, separadores de fila, el trazo de un
+  // checkbox sin marcar) — mismo criterio que --text/--bg: tinte de --text
+  // sobre el fondo, no un valor fijo, para que sigan siendo visibles (no
+  // "invisibles" por accidente) al cambiar de modo. Estos tres NO están en
+  // la tabla de DESIGN.md porque no son parte de la paleta con nombre — son
+  // un detalle de implementación interno para que ese cambio de tokens no
+  // deje bordes ilegibles en modo claro.
+  --mfx-hairline-subtle: rgba(245, 247, 250, 0.08);
+  --mfx-hairline: rgba(245, 247, 250, 0.15);
+  --mfx-hairline-strong: rgba(245, 247, 250, 0.3);
+
   --mfx-tab-bar-height: 64px;
+}
+
+// Modo claro (ver DESIGN.md, "Modo claro") — mismo layout y componentes,
+// solo cambian los valores de estos tokens. ThemeService pone/quita
+// data-theme="light" en <html>; sin el atributo, el modo oscuro de :root
+// arriba sigue siendo el default. --primary/--accent/--danger conservan el
+// mismo matiz (HSL) que en oscuro, pero más oscuros: los valores originales
+// (pensados para texto claro sobre fondo oscuro) tienen muy poco contraste
+// como texto/botón sobre fondo claro — verificado con la fórmula de
+// contraste WCAG, ver historial de la Fase 8.
+:root[data-theme='light'] {
+  --bg: #ffffff;
+  --surface: #f2f4f7;
+  --primary: #008561;
+  --accent: #946800;
+  --danger: #cb1010;
+  --text: #060b14;
+
+  --mfx-hairline-subtle: rgba(6, 11, 20, 0.08);
+  --mfx-hairline: rgba(6, 11, 20, 0.15);
+  --mfx-hairline-strong: rgba(6, 11, 20, 0.3);
 }
 
 * {
@@ -104,7 +136,7 @@ body {
     font-size: 1rem;
     color: var(--text);
     background: var(--bg);
-    border: 1px solid rgba(245, 247, 250, 0.15);
+    border: 1px solid var(--mfx-hairline);
     border-radius: 10px;
     padding: 0.625rem 0.75rem;
 

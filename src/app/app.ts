@@ -3,6 +3,7 @@ import { RouterOutlet } from '@angular/router';
 
 import { NotificationBannerState } from './core/notification-banner-state/notification-banner-state';
 import { Notifications } from './core/notifications/notifications';
+import { ThemeService } from './core/theme/theme';
 import { Toast } from './shared/toast/toast';
 
 @Component({
@@ -14,6 +15,10 @@ import { Toast } from './shared/toast/toast';
 export class App {
   private readonly notifications = inject(Notifications);
   readonly notificationBannerState = inject(NotificationBannerState);
+  // Se inyecta acá (no se usa desde el template) para que su constructor
+  // corra apenas arranca la app — aplica el tema (sistema o guardado) lo
+  // antes posible, antes de que el usuario llegue a Ajustes o Login.
+  private readonly themeService = inject(ThemeService);
 
   constructor() {
     // Ambos son seguros de llamar siempre, sin importar si el usuario ya

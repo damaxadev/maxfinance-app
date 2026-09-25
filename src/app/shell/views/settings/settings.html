@@ -7,6 +7,14 @@
   </mfx-card>
 
   <div class="mfx-section-header">
+    <h2>Apariencia</h2>
+  </div>
+
+  <mfx-card [index]="1">
+    <mfx-theme-toggle />
+  </mfx-card>
+
+  <div class="mfx-section-header">
     <h2>Presupuestos</h2>
     @if (!addingBudget() && unbudgetedExpenseCategories().length > 0) {
       <button type="button" class="mfx-section-add" (click)="openAddBudget()">+ Agregar categoría</button>

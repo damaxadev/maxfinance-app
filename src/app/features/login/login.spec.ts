@@ -1,9 +1,11 @@
+import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
 import { vi } from 'vitest';
 
 import { Auth } from '../../core/auth/auth';
+import { ThemeService } from '../../core/theme/theme';
 import { Login } from './login';
 
 describe('Login', () => {
@@ -20,6 +22,10 @@ describe('Login', () => {
         provideNoopAnimations(),
         provideRouter([{ path: 'inicio', children: [] }]),
         { provide: Auth, useValue: { signInWithGoogle } },
+        // ThemeToggle (visible en Login, antes de autenticarse) inyecta
+        // ThemeService directamente — se stubea acá, ver theme.spec.ts para
+        // su propio comportamiento.
+        { provide: ThemeService, useValue: { theme: signal('dark').asReadonly(), toggle: vi.fn().mockResolvedValue(undefined) } },
       ],
     }).compileComponents();
 
@@ -30,6 +36,10 @@ describe('Login', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('shows the theme toggle, visible before authenticating', () => {
+    expect(fixture.nativeElement.querySelector('mfx-theme-toggle')).toBeTruthy();
   });
 
   it('shows a loading state while signing in and clears it afterwards', async () => {

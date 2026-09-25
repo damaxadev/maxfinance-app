@@ -1,3 +1,4 @@
+import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { BehaviorSubject, of } from 'rxjs';
@@ -15,6 +16,7 @@ import { GroupsService } from '../../../core/groups/groups';
 import { MovementsService } from '../../../core/movements/movements';
 import { RecurringPayments } from '../../../core/recurring-payments/recurring-payments';
 import { SettlementsService } from '../../../core/settlements/settlements';
+import { ThemeService } from '../../../core/theme/theme';
 
 // Chart.js necesita un <canvas> con un contexto 2D real, que jsdom no
 // implementa (mismo motivo que canvas-confetti se mockea en
@@ -24,24 +26,27 @@ import { SettlementsService } from '../../../core/settlements/settlements';
 const { MockChart, chartInstances } = vi.hoisted(() => {
   const chartInstances: {
     type: string;
-    data: { labels: unknown[]; datasets: { data: unknown[]; backgroundColor?: unknown }[] };
+    data: {
+      labels: unknown[];
+      datasets: { data: unknown[]; backgroundColor?: unknown; borderColor?: unknown; pointBackgroundColor?: unknown }[];
+    };
+    options: Record<string, unknown>;
     destroy: () => void;
     update: () => void;
   }[] = [];
 
   class MockChart {
     static register = vi.fn();
-    data: { labels: unknown[]; datasets: { data: unknown[]; backgroundColor?: unknown }[] };
+    data: (typeof chartInstances)[number]['data'];
+    options: Record<string, unknown>;
     type: string;
     destroy = vi.fn();
     update = vi.fn();
 
-    constructor(
-      _canvas: unknown,
-      config: { type: string; data: { labels: unknown[]; datasets: { data: unknown[] }[] } }
-    ) {
+    constructor(_canvas: unknown, config: { type: string; data: (typeof chartInstances)[number]['data']; options: Record<string, unknown> }) {
       this.type = config.type;
       this.data = config.data;
+      this.options = config.options;
       chartInstances.push(this as never);
     }
   }
@@ -82,12 +87,18 @@ function configure(
     allGroupMovements?: unknown[];
     allGroupSettlements?: unknown[];
     getMemberProfiles?: ReturnType<typeof vi.fn>;
+    themeSignal?: ReturnType<typeof signal<'dark' | 'light'>>;
   } = {}
 ) {
   return TestBed.configureTestingModule({
     imports: [Home],
     providers: [
       provideNoopAnimations(),
+      // Home reconstruye los colores de las gráficas cuando el tema cambia
+      // en vivo (ver ThemeService en su constructor) — un stub controlable
+      // por el test en vez del servicio real, que llamaría a
+      // @capacitor/preferences de verdad (ver theme.spec.ts para ese).
+      { provide: ThemeService, useValue: { theme: overrides.themeSignal ?? signal('dark') } },
       { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
       { provide: Auth, useValue: { currentUser: { uid: 'u1' } } },
       { provide: Categories, useValue: { categories$: of(fakeCategories) } },
@@ -439,5 +450,76 @@ describe('Home charts', () => {
     fixture.detectChanges();
 
     expect(chartInstances.find((c) => c.type === 'doughnut')).toBeUndefined();
+  });
+});
+
+describe('Home charts follow the theme (Fase 8 fix)', () => {
+  // getComputedStyle real de jsdom no resuelve custom properties sin la
+  // hoja de estilos real cargada — se mockea directamente para controlar
+  // qué "resuelve" cada token, igual que lo haría el navegador real con
+  // styles.scss aplicado.
+  function mockResolvedColors(values: Record<string, string>) {
+    vi.stubGlobal(
+      'getComputedStyle',
+      vi.fn(() => ({ getPropertyValue: (prop: string) => values[prop] ?? '' }) as CSSStyleDeclaration)
+    );
+  }
+
+  beforeEach(() => {
+    // chartInstances es un array a nivel de módulo, compartido por TODOS
+    // los tests del archivo — sin esto, .find() puede devolver un chart
+    // creado por un test ANTERIOR (de otro describe) en vez del que
+    // acabamos de crear acá.
+    chartInstances.length = 0;
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('reads chart colors from the CURRENT resolved theme tokens (getComputedStyle), not a hardcoded value', async () => {
+    mockResolvedColors({
+      '--text': '#060b14',
+      '--primary': '#008561',
+      '--mfx-hairline-subtle': 'rgba(6, 11, 20, 0.08)',
+    });
+    const now = new Date();
+    await configure({
+      themeSignal: signal('light'),
+      movements: [{ id: 'm1', categoryId: 'cat-food', amount: 100, type: 'expense', date: ts(now), groupId: null }],
+    });
+
+    const fixture = TestBed.createComponent(Home);
+    fixture.detectChanges();
+
+    const trend = chartInstances.find((c) => c.type === 'line')!;
+    expect(trend.data.datasets[0].borderColor).toBe('#008561');
+    const scales = trend.options['scales'] as { x: { ticks: { color: string } } };
+    expect(scales.x.ticks.color).toBe('#060b14');
+  });
+
+  it('rebuilds the chart colors live when the theme changes, without reloading the view', async () => {
+    mockResolvedColors({ '--text': '#f5f7fa', '--primary': '#00e6a8', '--mfx-hairline-subtle': 'rgba(245, 247, 250, 0.08)' });
+    const themeSignal = signal<'dark' | 'light'>('dark');
+    const now = new Date();
+    await configure({
+      themeSignal,
+      movements: [{ id: 'm1', categoryId: 'cat-food', amount: 100, type: 'expense', date: ts(now), groupId: null }],
+    });
+
+    const fixture = TestBed.createComponent(Home);
+    fixture.detectChanges();
+
+    const trend = chartInstances.find((c) => c.type === 'line')!;
+    expect(trend.data.datasets[0].borderColor).toBe('#00e6a8');
+
+    // El usuario cambia a modo claro EN VIVO, sin recargar Inicio.
+    mockResolvedColors({ '--text': '#060b14', '--primary': '#008561', '--mfx-hairline-subtle': 'rgba(6, 11, 20, 0.08)' });
+    themeSignal.set('light');
+    fixture.detectChanges();
+
+    expect(trend.data.datasets[0].borderColor).toBe('#008561');
+    const scales = trend.options['scales'] as { x: { ticks: { color: string } } };
+    expect(scales.x.ticks.color).toBe('#060b14');
   });
 });
