@@ -52,6 +52,10 @@ export class MovementForm {
   private readonly fb = inject(FormBuilder);
 
   readonly initialValue = input<PersonalMovementWithId | null>(null);
+  // Solo aplica en modo create — etiqueta el movimiento a un grupo type:
+  // 'personal' (ver MovementFormState). Ignorado si initialValue está
+  // presente (editar nunca cambia el groupId de un movimiento existente).
+  readonly groupId = input<string | null>(null);
   readonly saved = output<void>();
   readonly deleted = output<void>();
 
@@ -164,7 +168,7 @@ export class MovementForm {
       if (existing) {
         await this.movements.update(existing.id, existing, value);
       } else {
-        await this.movements.create(value);
+        await this.movements.create(value, this.groupId());
       }
       this.saved.emit();
     } catch (error) {

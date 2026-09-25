@@ -25,6 +25,14 @@ const fakeMembers = [
   { uid: 'u1', displayName: 'Diego', email: 'diego@example.com', photoURL: '' },
   { uid: 'u2', displayName: 'Ana', email: 'ana@example.com', photoURL: '' },
 ];
+const fakeSharedGroup = {
+  id: 'group1',
+  name: 'Apartamento',
+  members: ['u1', 'u2'],
+  createdBy: 'u1',
+  createdAt: {} as never,
+  type: 'shared' as const,
+};
 
 describe('SharedExpenseForm', () => {
   let component: SharedExpenseForm;
@@ -42,7 +50,7 @@ describe('SharedExpenseForm', () => {
         { provide: MovementsService, useValue: { createShared } },
         { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
         { provide: Categories, useValue: { categories$: of(fakeCategories) } },
-        { provide: GroupsService, useValue: { getMemberProfiles } },
+        { provide: GroupsService, useValue: { getMemberProfiles, groups$: of([fakeSharedGroup]) } },
         { provide: Auth, useValue: { currentUser: { uid: 'u1' } } },
       ],
     }).compileComponents();
@@ -277,7 +285,7 @@ describe('SharedExpenseForm without an active group', () => {
         { provide: MovementsService, useValue: { createShared: vi.fn() } },
         { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
         { provide: Categories, useValue: { categories$: of(fakeCategories) } },
-        { provide: GroupsService, useValue: { getMemberProfiles: vi.fn().mockResolvedValue([]) } },
+        { provide: GroupsService, useValue: { getMemberProfiles: vi.fn().mockResolvedValue([]), groups$: of([]) } },
         { provide: Auth, useValue: { currentUser: { uid: 'u1' } } },
       ],
     }).compileComponents();
@@ -288,6 +296,46 @@ describe('SharedExpenseForm without an active group', () => {
 
   it('shows a message instead of the form', () => {
     expect(fixture.nativeElement.textContent).toContain('Primero crea o únete a un grupo');
+    expect(fixture.nativeElement.querySelector('form')).toBeNull();
+  });
+});
+
+// Fase 9: GroupDetail/Groups ya enrutan a MovementForm para un grupo
+// personal, así que este caso solo puede llegar por el FAB ("Agregar gasto
+// compartido"), que no fija un groupId y cae al grupo activo.
+describe('SharedExpenseForm with a personal group active (Fase 9 guard)', () => {
+  let fixture: ComponentFixture<SharedExpenseForm>;
+
+  const personalGroup = {
+    id: 'group-personal',
+    name: 'Ahorros',
+    members: ['u1'],
+    createdBy: 'u1',
+    createdAt: {} as never,
+    type: 'personal' as const,
+  };
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [SharedExpenseForm],
+      providers: [
+        { provide: MovementsService, useValue: { createShared: vi.fn() } },
+        { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
+        { provide: Categories, useValue: { categories$: of(fakeCategories) } },
+        { provide: GroupsService, useValue: { getMemberProfiles: vi.fn().mockResolvedValue([]), groups$: of([personalGroup]) } },
+        { provide: Auth, useValue: { currentUser: { uid: 'u1' } } },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(SharedExpenseForm);
+    TestBed.inject(ActiveGroup).select('group-personal');
+    fixture.detectChanges();
+    await flushMicrotasks();
+    fixture.detectChanges();
+  });
+
+  it('shows a guard message instead of the split form, and never renders it', () => {
+    expect(fixture.nativeElement.textContent).toContain('Este es un grupo personal');
     expect(fixture.nativeElement.querySelector('form')).toBeNull();
   });
 });

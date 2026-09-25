@@ -7,7 +7,9 @@ import { ActiveGroup } from '../../../core/active-group/active-group';
 import { GroupsService, type GroupMemberProfile, type GroupWithId } from '../../../core/groups/groups';
 import { GroupDetailState } from '../../../core/group-detail-state/group-detail-state';
 import { GroupFormState } from '../../../core/group-form-state/group-form-state';
+import { MovementFormState } from '../../../core/movement-form-state/movement-form-state';
 import { SharedExpenseFormState } from '../../../core/shared-expense-form-state/shared-expense-form-state';
+import { isSharedGroup } from '../../../models/group.model';
 
 const MAX_STACKED_AVATARS = 3;
 
@@ -21,6 +23,7 @@ export class Groups {
   private readonly groupsService = inject(GroupsService);
   private readonly groupDetailState = inject(GroupDetailState);
   private readonly sharedExpenseFormState = inject(SharedExpenseFormState);
+  private readonly movementFormState = inject(MovementFormState);
   readonly groupFormState = inject(GroupFormState);
   readonly activeGroup = inject(ActiveGroup);
 
@@ -75,6 +78,10 @@ export class Groups {
 
   addExpense(group: GroupWithId, event: Event): void {
     event.stopPropagation();
-    this.sharedExpenseFormState.openCreate(group.id);
+    if (isSharedGroup(group)) {
+      this.sharedExpenseFormState.openCreate(group.id);
+    } else {
+      this.movementFormState.openCreate(group.id);
+    }
   }
 }

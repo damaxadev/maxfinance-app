@@ -1,11 +1,16 @@
 import { Component, computed, effect, inject, input, output, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { type AbstractControl, FormBuilder, ReactiveFormsModule, type ValidationErrors, Validators } from '@angular/forms';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
+import { switchMap } from 'rxjs';
 
 import { Auth } from '../../../core/auth/auth';
 import { GroupsService, type GroupMemberProfile } from '../../../core/groups/groups';
+import { MovementFormState } from '../../../core/movement-form-state/movement-form-state';
+import { MovementsService } from '../../../core/movements/movements';
 import { SharedExpenseFormState } from '../../../core/shared-expense-form-state/shared-expense-form-state';
+import { isSharedGroup } from '../../../models/group.model';
+import { AnimatedNumber } from '../../../shared/animated-number/animated-number';
 import { Avatar } from '../../../shared/avatar/avatar';
 import { GroupActivity } from '../group-activity/group-activity';
 import { GroupBalance } from '../group-balance/group-balance';
@@ -14,21 +19,37 @@ const JUST_INVITED_DURATION_MS = 2000;
 
 @Component({
   selector: 'mfx-group-detail',
-  imports: [ReactiveFormsModule, Avatar, GroupBalance, GroupActivity],
+  imports: [ReactiveFormsModule, Avatar, AnimatedNumber, GroupBalance, GroupActivity],
   templateUrl: './group-detail.html',
   styleUrl: './group-detail.scss',
 })
 export class GroupDetail {
   private readonly groupsService = inject(GroupsService);
+  private readonly movementsService = inject(MovementsService);
   private readonly auth = inject(Auth);
   private readonly fb = inject(FormBuilder);
   private readonly sharedExpenseFormState = inject(SharedExpenseFormState);
+  private readonly movementFormState = inject(MovementFormState);
 
   readonly groupId = input.required<string>();
   readonly left = output<void>();
 
   private readonly groups = toSignal(this.groupsService.groups$, { initialValue: [] });
   readonly group = computed(() => this.groups().find((g) => g.id === this.groupId()) ?? null);
+  readonly isSharedGroup = computed(() => isSharedGroup(this.group()));
+
+  // "Total gastado" (grupos type: 'personal', ver DATABASE.md) — reemplaza
+  // a "Balance", que no aplica: un grupo personal nunca tiene deuda entre
+  // personas. Solo cuenta gastos (expense), no ingresos.
+  private readonly groupMovements = toSignal(
+    toObservable(this.groupId).pipe(switchMap((id) => this.movementsService.groupMovements$(id))),
+    { initialValue: [] }
+  );
+  readonly totalSpent = computed(() =>
+    this.groupMovements()
+      .filter((m) => m.type === 'expense')
+      .reduce((sum, m) => sum + m.amount, 0)
+  );
 
   readonly currentUid = computed(() => this.auth.currentUser?.uid ?? null);
   // "Eliminar miembro" y "Eliminar grupo" son acciones de creador — pero la
@@ -239,7 +260,13 @@ export class GroupDetail {
   }
 
   addExpense(): void {
-    this.sharedExpenseFormState.openCreate(this.groupId());
+    if (this.isSharedGroup()) {
+      this.sharedExpenseFormState.openCreate(this.groupId());
+    } else {
+      // Grupo personal: formulario simple de movimiento, no el de gasto
+      // compartido — nunca lleva paidBy/splitType/splits (DATABASE.md).
+      this.movementFormState.openCreate(this.groupId());
+    }
   }
 
   private markJustInvited(uid: string): void {

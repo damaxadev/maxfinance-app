@@ -1,4 +1,6 @@
 <main class="mfx-profile">
+  <button type="button" class="mfx-profile__back" (click)="goBack()">‹ Volver</button>
+
   @if (currentUser(); as user) {
     <mfx-avatar [photoUrl]="user.photoUrl" [displayName]="user.displayName ?? ''" [size]="96" />
 
@@ -7,6 +9,28 @@
         Nombre
         <input type="text" [value]="displayNameDraft()" (input)="onDisplayNameInput($any($event.target).value)" />
       </label>
+
+      <label class="mfx-profile__field">
+        Teléfono
+        <input
+          type="tel"
+          placeholder="Opcional"
+          [value]="phoneDraft()"
+          (input)="onPhoneInput($any($event.target).value)"
+        />
+      </label>
+
+      <div class="mfx-profile__field mfx-profile__field--readonly">
+        <span>Correo</span>
+        <p>{{ user.email }}</p>
+      </div>
+
+      @if (memberSinceLabel(); as memberSince) {
+        <div class="mfx-profile__field mfx-profile__field--readonly">
+          <span>Miembro desde</span>
+          <p>{{ memberSince }}</p>
+        </div>
+      }
 
       <button type="button" class="mfx-profile__save" [disabled]="saving()" (click)="save()">
         {{ saving() ? 'Guardando…' : 'Guardar cambios' }}

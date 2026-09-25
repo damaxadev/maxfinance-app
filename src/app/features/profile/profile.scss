@@ -5,6 +5,23 @@
   align-items: center;
   gap: 1.25rem;
   padding: 2rem 1.5rem;
+  position: relative;
+}
+
+.mfx-profile__back {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.5rem 0;
+
+  &:hover {
+    opacity: 0.8;
+  }
 }
 
 .mfx-profile__card {
@@ -36,6 +53,15 @@
       outline: none;
       border-color: var(--primary);
     }
+  }
+}
+
+.mfx-profile__field--readonly {
+  p {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--text);
+    opacity: 0.95;
   }
 }
 
@@ -73,14 +99,19 @@
 
 .mfx-profile__signout {
   border: none;
-  background: transparent;
-  color: var(--danger);
+  border-radius: 999px;
+  background: var(--danger);
+  color: var(--bg);
+  width: 100%;
+  max-width: 360px;
+  padding: 0.75rem 1.5rem;
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  font-weight: 600;
   cursor: pointer;
-  padding: 0.5rem;
+  transition: opacity 150ms ease-out;
 
   &:hover {
-    text-decoration: underline;
+    opacity: 0.9;
   }
 }

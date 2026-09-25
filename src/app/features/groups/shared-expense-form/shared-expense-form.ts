@@ -8,6 +8,7 @@ import { Auth } from '../../../core/auth/auth';
 import { Categories } from '../../../core/categories/categories';
 import { GroupsService, type GroupMemberProfile } from '../../../core/groups/groups';
 import { MovementsService } from '../../../core/movements/movements';
+import { isSharedGroup } from '../../../models/group.model';
 import type { MovementSplit, SplitType } from '../../../models/movement.model';
 import { Avatar } from '../../../shared/avatar/avatar';
 import { MfxCurrencyInputDirective } from '../../../shared/currency/currency-input.directive';
@@ -82,6 +83,23 @@ export class SharedExpenseForm {
   readonly fixedGroupId = input<string | null>(null);
   readonly groupId = computed(() => this.fixedGroupId() ?? this.activeGroup.groupId());
   readonly currentUid = computed(() => this.auth.currentUser?.uid ?? null);
+
+  // Este formulario nunca debería abrirse contra un grupo type: 'personal'
+  // (GroupDetail y la tarjeta de Grupos ya enrutan a MovementForm en ese
+  // caso — ver DATABASE.md, "Gasto en grupo personal") — pero el FAB
+  // ("Agregar gasto compartido") no fija un groupId, así que puede caer acá
+  // igual si ese es el grupo activo. Guarda defensiva para no crear un
+  // SharedMovement (con paidBy/splitType/splits) contra un grupo que nunca
+  // debe tenerlos.
+  private readonly groups = toSignal(this.groupsService.groups$, { initialValue: [] });
+  readonly isPersonalGroup = computed(() => {
+    const id = this.groupId();
+    if (!id) {
+      return false;
+    }
+    const group = this.groups().find((g) => g.id === id);
+    return !!group && !isSharedGroup(group);
+  });
 
   readonly splitTypes = SPLIT_TYPES;
   readonly accounts = toSignal(this.accountsService.accounts$, { initialValue: [] });

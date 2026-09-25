@@ -112,6 +112,30 @@ describe('MovementsService', () => {
     });
   });
 
+  it('create(): tags the movement with groupId when creating an expense inside a personal group (Fase 9)', async () => {
+    await service.create(
+      {
+        type: 'expense',
+        amount: 80000,
+        accountId: 'acc1',
+        categoryId: 'cat1',
+        date: new Date('2026-01-15'),
+        note: 'Arriendo',
+      },
+      'personal-group-1'
+    );
+
+    expect(mockBatch.set).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ groupId: 'personal-group-1' })
+    );
+    // Sigue siendo un movimiento personal en todo lo demás — mismo efecto
+    // sobre la cuenta, sin paidBy/splitType/splits.
+    expect(mockBatch.update).toHaveBeenCalledWith(expect.anything(), {
+      balance: { __op: 'increment', value: -80000 },
+    });
+  });
+
   it('update(): adjusts the same account by the delta when the account is unchanged', async () => {
     const previous: PersonalMovement = {
       uid: 'u1',

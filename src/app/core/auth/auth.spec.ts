@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { Firestore } from '@angular/fire/firestore';
 import { Auth as FirebaseJsAuth } from '@angular/fire/auth';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
+import { type Observable, firstValueFrom, of } from 'rxjs';
 import { vi } from 'vitest';
 
 import { Auth } from './auth';
@@ -22,6 +23,22 @@ vi.mock('firebase/auth', () => ({
   GoogleAuthProvider: { credential: mockCredential },
   signInWithCredential: mockSignInWithCredential,
   signOut: mockJsSignOut,
+}));
+
+const { mockDoc, mockDocData, mockUpdateDoc } = vi.hoisted(() => ({
+  mockDoc: vi.fn((_fs: unknown, path: string, id: string) => ({ path, id })),
+  mockDocData: vi.fn((): Observable<unknown> => of(undefined)),
+  mockUpdateDoc: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@angular/fire/firestore', () => ({
+  Firestore: class {},
+  doc: mockDoc,
+  docData: mockDocData,
+  getDoc: vi.fn(),
+  setDoc: vi.fn().mockResolvedValue(undefined),
+  updateDoc: mockUpdateDoc,
+  serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP'),
 }));
 
 describe('Auth', () => {
@@ -56,6 +73,9 @@ describe('Auth', () => {
     mockCredential.mockClear();
     mockSignInWithCredential.mockClear();
     mockJsSignOut.mockClear();
+    mockDoc.mockClear();
+    mockDocData.mockReset().mockReturnValue(of(undefined));
+    mockUpdateDoc.mockClear();
 
     TestBed.configureTestingModule({
       providers: [
@@ -157,6 +177,59 @@ describe('Auth', () => {
       resolveAuthStateReady();
 
       await expect(promise).resolves.toBe('fake-id-token');
+    });
+  });
+
+  describe('userDocument$', () => {
+    it('emits null without querying Firestore when there is no signed-in user', async () => {
+      expect(await firstValueFrom(service.userDocument$)).toBeNull();
+      expect(mockDocData).not.toHaveBeenCalled();
+    });
+
+    it('reads users/{uid} once the session is known (Fase 9, Perfil)', async () => {
+      mockDocData.mockReturnValue(
+        of({ uid: 'u1', displayName: 'Ada', email: 'ada@example.com', photoURL: '', createdAt: {}, phone: '3001234567' })
+      );
+      authStateChangeCallback?.({ user: { uid: 'u1' } });
+
+      const result = await firstValueFrom(service.userDocument$);
+
+      expect(mockDoc).toHaveBeenCalledWith(expect.anything(), 'users', 'u1');
+      expect(result?.phone).toBe('3001234567');
+    });
+
+    it('emits null (instead of erroring) if reading Firestore fails', async () => {
+      mockDocData.mockImplementation(() => {
+        throw new Error('permission-denied');
+      });
+      authStateChangeCallback?.({ user: { uid: 'u1' } });
+
+      expect(await firstValueFrom(service.userDocument$)).toBeNull();
+    });
+  });
+
+  describe('updatePhone()', () => {
+    it('throws when there is no signed-in user', async () => {
+      await expect(service.updatePhone('3001234567')).rejects.toThrow('No hay un usuario autenticado.');
+      expect(mockUpdateDoc).not.toHaveBeenCalled();
+    });
+
+    it('trims and saves the phone on users/{uid}', async () => {
+      authStateChangeCallback?.({ user: { uid: 'u1' } });
+
+      await service.updatePhone('  3001234567  ');
+
+      expect(mockUpdateDoc).toHaveBeenCalledWith(expect.objectContaining({ path: 'users', id: 'u1' }), {
+        phone: '3001234567',
+      });
+    });
+
+    it('stores null when cleared to an empty value', async () => {
+      authStateChangeCallback?.({ user: { uid: 'u1' } });
+
+      await service.updatePhone('   ');
+
+      expect(mockUpdateDoc).toHaveBeenCalledWith(expect.anything(), { phone: null });
     });
   });
 });

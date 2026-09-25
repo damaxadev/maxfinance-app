@@ -178,6 +178,7 @@ describe('Movements with shared expenses', () => {
   it('labels a shared expense with its group name instead of an account', () => {
     const item = component.filteredMovements().find((m) => m.id === 'shared1')!;
     expect(item.groupName).toBe('Nuevo grupo');
+    expect(item.groupIsShared).toBe(true);
     expect(item.kind).toBe('shared');
   });
 
@@ -187,5 +188,51 @@ describe('Movements with shared expenses', () => {
     component.editMovement(item);
 
     expect(state.request()).toBeNull();
+  });
+});
+
+describe('Movements with a personal-group expense (Fase 9)', () => {
+  let component: Movements;
+  let fixture: ComponentFixture<Movements>;
+
+  const personalGroup = {
+    id: 'group-personal',
+    name: 'Ahorros',
+    members: ['u1'],
+    createdBy: 'u1',
+    createdAt: {} as never,
+    type: 'personal' as const,
+  };
+
+  beforeEach(async () => {
+    const shared = [sharedMovement({ id: 'shared1', groupId: 'group-personal', paidBy: undefined, splitType: undefined, splits: undefined })];
+
+    await TestBed.configureTestingModule({
+      imports: [Movements],
+      providers: [
+        provideNoopAnimations(),
+        { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
+        { provide: Categories, useValue: { categories$: of(fakeCategories) } },
+        { provide: GroupsService, useValue: { groups$: of([personalGroup]) } },
+        {
+          provide: MovementsService,
+          useValue: { personalMovements$: of([]), sharedMovementsForGroups$: () => of(shared) },
+        },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(Movements);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  it('labels it with just the group name, no "Compartido" prefix', () => {
+    const item = component.filteredMovements().find((m) => m.id === 'shared1')!;
+    expect(item.groupName).toBe('Ahorros');
+    expect(item.groupIsShared).toBe(false);
+
+    const tag = fixture.nativeElement.querySelector('.mfx-movements__item-tag');
+    expect(tag.textContent).toContain('Ahorros');
+    expect(tag.textContent).not.toContain('Compartido');
   });
 });

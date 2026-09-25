@@ -1,5 +1,9 @@
 @if (!groupId()) {
   <p class="mfx-form__error">Primero crea o únete a un grupo (pestaña Grupos) para registrar un gasto compartido.</p>
+} @else if (isPersonalGroup()) {
+  <p class="mfx-form__error">
+    Este es un grupo personal — usa "Agregar gasto" desde el grupo para registrar un movimiento ahí.
+  </p>
 } @else if (membersLoading()) {
   <p>Cargando miembros del grupo…</p>
 } @else if (membersError()) {

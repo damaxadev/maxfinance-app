@@ -47,6 +47,30 @@ describe('RecurringPaymentForm (create)', () => {
     expect(component.expenseCategories()).toEqual([fakeCategories[0]]);
   });
 
+  it('offers all 8 frequencies in Spanish, most to least frequent (Fase 9)', () => {
+    const options = Array.from<HTMLOptionElement>(fixture.nativeElement.querySelectorAll('select[formControlName="frequency"] option'));
+    expect(options.map((o) => o.value)).toEqual([
+      'daily',
+      'weekly',
+      'biweekly',
+      'monthly',
+      'bimonthly',
+      'quarterly',
+      'semiannual',
+      'annual',
+    ]);
+    expect(options.map((o) => o.textContent?.trim())).toEqual([
+      'Diaria',
+      'Semanal',
+      'Quincenal',
+      'Mensual',
+      'Bimestral',
+      'Trimestral',
+      'Semestral',
+      'Anual',
+    ]);
+  });
+
   it('does not submit an invalid form', async () => {
     await component.submit();
 

@@ -131,7 +131,10 @@ describe('Shell', () => {
         // GroupDetail inyecta Auth directamente (para saber "quién soy" y
         // decidir qué botón mostrar por fila) — se mockea acá en vez de
         // dejar que se construya la real, que a su vez necesitaría Firestore.
-        { provide: Auth, useValue: { currentUser: { uid: 'u1' } } },
+        {
+          provide: Auth,
+          useValue: { currentUser: { uid: 'u1' }, currentUser$: of({ uid: 'u1', displayName: 'Diego', photoUrl: '' }) },
+        },
         // BalancesModal (dentro de Inicio) inyecta MonthlyInsights — se
         // mockea acá por el mismo motivo que Auth arriba (la real necesita
         // Firestore, que este TestBed no provee).
@@ -200,7 +203,7 @@ describe('Shell', () => {
     fab.movementRequested.emit();
     fixture.detectChanges();
 
-    expect(component.movementFormState.request()).toEqual({ mode: 'create' });
+    expect(component.movementFormState.request()).toEqual({ mode: 'create', groupId: null });
   });
 
   it('opens the create-group form when the FAB requests it', () => {

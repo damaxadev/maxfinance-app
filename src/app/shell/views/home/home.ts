@@ -24,6 +24,7 @@ import { GroupsService, type GroupMemberProfile, type GroupWithId } from '../../
 import { MovementsService } from '../../../core/movements/movements';
 import { RecurringPayments } from '../../../core/recurring-payments/recurring-payments';
 import { ThemeService } from '../../../core/theme/theme';
+import { isSharedGroup } from '../../../models/group.model';
 import type { MovementType } from '../../../models/movement.model';
 import { GroupActivity } from '../../../features/groups/group-activity/group-activity';
 
@@ -60,6 +61,10 @@ interface HomeMovementItem {
   amount: number;
   type: MovementType;
   groupName: string | null;
+  // Un grupo personal solo muestra su nombre como etiqueta ("Apartamento"),
+  // sin la palabra "Compartido" — esa palabra se reserva para grupos type:
+  // 'shared' (ver DATABASE.md, "Grupos personales").
+  groupIsShared: boolean;
   dateLabel: string;
 }
 
@@ -143,6 +148,10 @@ export class Home {
   readonly groups = toSignal(this.groupsService.groups$, { initialValue: [] });
   private readonly groupsById = computed(() => new Map(this.groups().map((group) => [group.id, group])));
   readonly groupIds = computed(() => this.groups().map((group) => group.id));
+  // "Gastos compartidos recientes" excluye los grupos type: 'personal' — no
+  // son "compartidos", no aplica el concepto de deuda entre personas (ver
+  // DESIGN.md, "Grupos personales").
+  readonly sharedGroupIds = computed(() => this.groups().filter(isSharedGroup).map((group) => group.id));
 
   private readonly movements = toSignal(
     toObservable(this.groupIds).pipe(switchMap((groupIds) => this.movementsService.combinedMovements$(groupIds))),
@@ -181,6 +190,7 @@ export class Home {
         amount: movement.amount,
         type: movement.type,
         groupName: movement.groupId === null ? null : this.groupsById().get(movement.groupId)?.name ?? 'Grupo',
+        groupIsShared: movement.groupId === null ? false : isSharedGroup(this.groupsById().get(movement.groupId)),
         dateLabel: movement.date.toDate().toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }),
       }))
   );

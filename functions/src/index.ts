@@ -224,17 +224,56 @@ export const getKnownContacts = onCall({ region: REGION }, async (request): Prom
   return userSnaps.filter((snap) => snap.exists).map(toUserProfile);
 });
 
-function advanceNextDate(current: Date, frequency: string): Date {
-  const next = new Date(current);
-  if (frequency === 'weekly') {
-    next.setDate(next.getDate() + 7);
-  } else {
-    // 'monthly' es el caso normal; cualquier otro valor futuro que
-    // DATABASE.md deja abierto ("etc") cae acá también, mensual por defecto
-    // en vez de fallar en silencio o quedar sin avanzar nunca.
-    next.setMonth(next.getMonth() + 1);
-  }
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
   return next;
+}
+
+// setMonth() ingenuo tiene el bug clásico de fin de mes: 31 de enero + 1 mes
+// da 3 de marzo (Date hace overflow al mes siguiente porque febrero no tiene
+// 31 días), no 28 de febrero — confirmado con Date(2026,0,31).setMonth(1)
+// antes de este fix. Acá se calcula primero el mes destino, se calcula
+// cuántos días tiene, y se recorta el día original a ese máximo.
+function addMonthsClamped(date: Date, months: number): Date {
+  const targetMonthIndex = date.getMonth() + months;
+  const firstOfTargetMonth = new Date(date.getFullYear(), targetMonthIndex, 1);
+  const lastDayOfTargetMonth = new Date(firstOfTargetMonth.getFullYear(), firstOfTargetMonth.getMonth() + 1, 0).getDate();
+  const day = Math.min(date.getDate(), lastDayOfTargetMonth);
+  return new Date(
+    firstOfTargetMonth.getFullYear(),
+    firstOfTargetMonth.getMonth(),
+    day,
+    date.getHours(),
+    date.getMinutes(),
+    date.getSeconds(),
+    date.getMilliseconds()
+  );
+}
+
+// Fase 9 (BACKLOG 63): antes solo 'monthly'/'weekly' — 'monthly' sigue
+// siendo el default para cualquier valor futuro que DATABASE.md deja
+// abierto, en vez de fallar en silencio o quedar sin avanzar nunca.
+function advanceNextDate(current: Date, frequency: string): Date {
+  switch (frequency) {
+    case 'daily':
+      return addDays(current, 1);
+    case 'weekly':
+      return addDays(current, 7);
+    case 'biweekly':
+      return addDays(current, 15);
+    case 'bimonthly':
+      return addMonthsClamped(current, 2);
+    case 'quarterly':
+      return addMonthsClamped(current, 3);
+    case 'semiannual':
+      return addMonthsClamped(current, 6);
+    case 'annual':
+      return addMonthsClamped(current, 12);
+    case 'monthly':
+    default:
+      return addMonthsClamped(current, 1);
+  }
 }
 
 interface PushNotificationContent {

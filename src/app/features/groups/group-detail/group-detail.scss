@@ -14,6 +14,13 @@
   }
 }
 
+.mfx-group-detail__total-spent {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--danger);
+}
+
 .mfx-group-detail__member {
   display: flex;
   align-items: center;

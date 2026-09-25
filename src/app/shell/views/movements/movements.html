@@ -60,7 +60,9 @@
             <div class="mfx-movements__item-text">
               <span class="mfx-movements__category-name">{{ categoryName(movement.categoryId) }}</span>
               @if (movement.groupName) {
-                <span class="mfx-movements__item-tag">Compartido · {{ movement.groupName }} · {{ formatDate(movement.date) }}</span>
+                <span class="mfx-movements__item-tag">
+                  {{ movement.groupIsShared ? 'Compartido · ' : '' }}{{ movement.groupName }} · {{ formatDate(movement.date) }}
+                </span>
               } @else {
                 <span class="mfx-movements__item-account">{{ accountName(movement.accountId ?? '') }} · {{ formatDate(movement.date) }}</span>
               }

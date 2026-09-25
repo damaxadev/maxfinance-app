@@ -18,12 +18,22 @@ import type { PersonalRecurringPayment } from '../../models/recurring-payment.mo
 
 export type PersonalRecurringPaymentWithId = PersonalRecurringPayment & { id: string };
 
+export type RecurringPaymentFrequency =
+  | 'daily'
+  | 'weekly'
+  | 'biweekly'
+  | 'monthly'
+  | 'bimonthly'
+  | 'quarterly'
+  | 'semiannual'
+  | 'annual';
+
 export interface RecurringPaymentFormValue {
   name: string;
   amount: number;
   categoryId: string;
   accountId: string;
-  frequency: 'monthly' | 'weekly';
+  frequency: RecurringPaymentFrequency;
   nextDate: Date;
   active: boolean;
 }

@@ -19,9 +19,14 @@ describe('MovementFormState', () => {
     expect(service.request()).toBeNull();
   });
 
-  it('opens in create mode', () => {
+  it('opens in create mode without a group by default', () => {
     service.openCreate();
-    expect(service.request()).toEqual({ mode: 'create' });
+    expect(service.request()).toEqual({ mode: 'create', groupId: null });
+  });
+
+  it('opens in create mode tagged to a personal group', () => {
+    service.openCreate('personal-group-1');
+    expect(service.request()).toEqual({ mode: 'create', groupId: 'personal-group-1' });
   });
 
   it('opens in edit mode with the given movement', () => {

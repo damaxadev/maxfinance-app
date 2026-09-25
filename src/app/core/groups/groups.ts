@@ -18,7 +18,7 @@ import {
 import { Functions, httpsCallable, type HttpsCallable } from '@angular/fire/functions';
 
 import { Auth } from '../auth/auth';
-import type { Group } from '../../models/group.model';
+import type { Group, GroupType } from '../../models/group.model';
 
 export type GroupWithId = Group & { id: string };
 
@@ -51,13 +51,14 @@ export class GroupsService {
     })
   );
 
-  async create(name: string): Promise<string> {
+  async create(name: string, type: GroupType): Promise<string> {
     const uid = this.requireUid();
     const newGroup: Omit<Group, 'createdAt'> & { createdAt: ReturnType<typeof serverTimestamp> } = {
       name,
       members: [uid],
       createdBy: uid,
       createdAt: serverTimestamp(),
+      type,
     };
     const ref = await addDoc(collection(this.firestore, 'groups'), newGroup);
     return ref.id;

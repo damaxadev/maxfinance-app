@@ -12,4 +12,6 @@ export interface User {
   // inició sesión — arreglo (no un solo valor) para no perder notificaciones
   // al usar más de un dispositivo. Ver Notifications, Fase 6.
   fcmTokens?: string[];
+  // Opcional, editable desde Perfil (Fase 9).
+  phone?: string | null;
 }

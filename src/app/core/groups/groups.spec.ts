@@ -66,14 +66,20 @@ describe('GroupsService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('creates a group with the current user as sole member and creator', async () => {
-    const id = await service.create('Apartamento');
+  it('creates a shared group with the current user as sole member and creator', async () => {
+    const id = await service.create('Apartamento', 'shared');
 
     expect(id).toBe('new-group-id');
     expect(mockAddDoc).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ name: 'Apartamento', members: ['u1'], createdBy: 'u1' })
+      expect.objectContaining({ name: 'Apartamento', members: ['u1'], createdBy: 'u1', type: 'shared' })
     );
+  });
+
+  it('creates a personal group with the type it was given', async () => {
+    await service.create('Ahorros', 'personal');
+
+    expect(mockAddDoc).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ type: 'personal' }));
   });
 
   it('leaves a group via the leaveGroup callable', async () => {
