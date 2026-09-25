@@ -11,12 +11,18 @@ import { calculateBudgetProgress, calculateBudgetSummary, sumExpensesByCategory 
 import { Budgets } from '../../../core/budgets/budgets';
 import { Categories } from '../../../core/categories/categories';
 import { GroupsService } from '../../../core/groups/groups';
+import { MonthlyInsights } from '../../../core/monthly-insights/monthly-insights';
 import { MovementsService } from '../../../core/movements/movements';
 
 function toMonthKey(date: Date): string {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, '0');
   return `${yyyy}-${mm}`;
+}
+
+function monthLabelEs(monthKey: string): string {
+  const [year, month] = monthKey.split('-').map(Number);
+  return new Intl.DateTimeFormat('es-CO', { month: 'long', year: 'numeric' }).format(new Date(year, month - 1, 1));
 }
 
 @Component({
@@ -33,6 +39,7 @@ export class BalancesModal {
   private readonly categoriesService = inject(Categories);
   private readonly auth = inject(Auth);
   private readonly aiSummary = inject(AiSummary);
+  private readonly monthlyInsightsService = inject(MonthlyInsights);
 
   readonly accounts = toSignal(this.accountsService.accounts$, { initialValue: [] });
   readonly totalBalance = computed(() => this.accounts().reduce((sum, account) => sum + account.balance, 0));
@@ -58,6 +65,15 @@ export class BalancesModal {
     calculateBudgetSummary(calculateBudgetProgress(this.budgets(), this.spentByCategory()))
   );
   private readonly hasBudget = computed(() => this.budgets().length > 0);
+
+  // Insight automático mensual (Cloud Function, ver DATABASE.md/BACKLOG 56)
+  // — reutiliza la misma tarjeta ya construida para el análisis bajo
+  // demanda (ver .mfx-balances-modal__analysis en el html/scss).
+  readonly lastMonthInsight = toSignal(this.monthlyInsightsService.lastMonthInsight$, { initialValue: null });
+  readonly lastMonthLabel = computed(() => {
+    const insight = this.lastMonthInsight();
+    return insight ? monthLabelEs(insight.month) : null;
+  });
 
   readonly analyzing = signal(false);
   readonly analysisError = signal<string | null>(null);

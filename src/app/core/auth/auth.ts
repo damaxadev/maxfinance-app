@@ -69,7 +69,18 @@ export class Auth {
   // Token de Firebase para autenticar llamadas al Worker de IA (ver
   // AiSummary) — usa el SDK web (ya sincronizado en signInWithGoogle()),
   // no el nativo, porque es el mismo que Firestore ya usa para sus reglas.
+  //
+  // authStateReady() es obligatorio acá: el SDK web restaura su propia
+  // sesión (desde su propia persistencia) en paralelo al SDK nativo, con su
+  // propia línea de tiempo — leer firebaseJsAuth.currentUser de una vez,
+  // sin esperar, puede devolver null aunque el usuario sí esté logueado
+  // (mismo tipo de carrera que auth-guard.ts ya resuelve para el SDK
+  // nativo esperando currentUser$ en vez de leer currentUser directo). Sin
+  // esto, un componente que pide el token muy temprano en el arranque de la
+  // app — como Settings, que no usa @defer (ver shell.html) — puede ver
+  // "No hay una sesión activa" con el usuario ya autenticado.
   async getIdToken(): Promise<string | null> {
+    await this.firebaseJsAuth.authStateReady();
     const user = this.firebaseJsAuth.currentUser;
     return user ? user.getIdToken() : null;
   }

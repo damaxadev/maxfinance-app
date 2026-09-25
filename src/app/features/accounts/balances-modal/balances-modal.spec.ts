@@ -10,6 +10,7 @@ import { Auth } from '../../../core/auth/auth';
 import { Budgets } from '../../../core/budgets/budgets';
 import { Categories } from '../../../core/categories/categories';
 import { GroupsService } from '../../../core/groups/groups';
+import { MonthlyInsights } from '../../../core/monthly-insights/monthly-insights';
 import { MovementsService } from '../../../core/movements/movements';
 
 const fakeAccounts = [
@@ -28,6 +29,7 @@ function configure(
     budgets?: unknown[];
     movements?: unknown[];
     analyze?: ReturnType<typeof vi.fn>;
+    lastMonthInsight?: unknown;
   } = {}
 ) {
   return TestBed.configureTestingModule({
@@ -41,6 +43,7 @@ function configure(
       { provide: MovementsService, useValue: { combinedMovements$: () => of(overrides.movements ?? []) } },
       { provide: Budgets, useValue: { budgetsForMonth$: () => of(overrides.budgets ?? []) } },
       { provide: AiSummary, useValue: { analyze: overrides.analyze ?? vi.fn() } },
+      { provide: MonthlyInsights, useValue: { lastMonthInsight$: of(overrides.lastMonthInsight ?? null) } },
     ],
   }).compileComponents();
 }
@@ -184,5 +187,27 @@ describe('BalancesModal cachedAgeLabel()', () => {
   it('uses the plural for more than 1 hour', () => {
     setResult(true, 5);
     expect(component.cachedAgeLabel()).toBe('5 horas');
+  });
+});
+
+describe('BalancesModal lastMonthInsight (Fase 8)', () => {
+  it('shows nothing when there is no insight for last month', async () => {
+    await configure({ lastMonthInsight: null });
+    const fixture = TestBed.createComponent(BalancesModal);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.mfx-balances-modal__analysis')).toBeNull();
+  });
+
+  it('reuses the analysis card to show the automatically generated monthly insight', async () => {
+    await configure({
+      lastMonthInsight: { uid: 'u1', month: '2026-02', text: 'Te fue bien en febrero.', generatedAt: {}, notifiedAt: {} },
+    });
+    const fixture = TestBed.createComponent(BalancesModal);
+    fixture.detectChanges();
+
+    const card = fixture.nativeElement.querySelector('.mfx-balances-modal__analysis');
+    expect(card.textContent).toContain('Te fue bien en febrero.');
+    expect(fixture.nativeElement.textContent).toContain('Resumen de febrero de 2026');
   });
 });

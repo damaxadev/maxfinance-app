@@ -5,7 +5,7 @@ import { of } from 'rxjs';
 import { vi } from 'vitest';
 
 import { Auth } from '../auth/auth';
-import { Notifications, RECURRING_PAYMENTS_CHANNEL_ID } from './notifications';
+import { MONTHLY_INSIGHT_CHANNEL_ID, Notifications, RECURRING_PAYMENTS_CHANNEL_ID } from './notifications';
 
 vi.mock('@angular/fire/firestore', () => ({
   Firestore: class {},
@@ -151,10 +151,32 @@ describe('Notifications', () => {
       );
     });
 
+    it('creates the fixed monthly-insight channel', async () => {
+      await service.ensureNotificationChannel();
+
+      expect(FirebaseMessaging.createChannel).toHaveBeenCalledWith(
+        expect.objectContaining({ id: MONTHLY_INSIGHT_CHANNEL_ID, importance: Importance.Default })
+      );
+    });
+
     it('never throws even if the platform does not support channels (e.g. web)', async () => {
       vi.mocked(FirebaseMessaging.createChannel).mockRejectedValue(new Error('not supported on web'));
 
       await expect(service.ensureNotificationChannel()).resolves.toBeUndefined();
+    });
+
+    it('still creates the other channel if one of the two calls rejects', async () => {
+      vi.mocked(FirebaseMessaging.createChannel).mockImplementation(async (channel) => {
+        if (channel.id === RECURRING_PAYMENTS_CHANNEL_ID) {
+          throw new Error('boom');
+        }
+      });
+
+      await service.ensureNotificationChannel();
+
+      expect(FirebaseMessaging.createChannel).toHaveBeenCalledWith(
+        expect.objectContaining({ id: MONTHLY_INSIGHT_CHANNEL_ID })
+      );
     });
   });
 

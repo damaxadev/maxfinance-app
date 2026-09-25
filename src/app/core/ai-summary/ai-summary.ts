@@ -31,6 +31,12 @@ export interface SummaryResult {
   generatedAt: string;
 }
 
+export interface AiUsageInfo {
+  count: number;
+  // null = disponible ahora mismo; si no, cuándo se libera la ventana de 24h.
+  nextAvailableAt: string | null;
+}
+
 /**
  * Cliente del endpoint /summary del Worker ("Analizar balances", IA bajo
  * demanda — ver DESIGN.md). El Worker aplica su propio límite de 1 consulta
@@ -65,5 +71,29 @@ export class AiSummary {
     }
 
     return (await response.json()) as SummaryResult;
+  }
+
+  // Consultado por Ajustes ("Uso de IA", ver DESIGN.md/BACKLOG 57) — cuántas
+  // veces se ha usado "Analizar balances" y cuándo está disponible el próximo.
+  async getUsage(): Promise<AiUsageInfo> {
+    const idToken = await this.auth.getIdToken();
+    if (!idToken) {
+      throw new Error('No hay una sesión activa.');
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(`${environment.workerUrl}/summary/usage`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+    } catch {
+      throw new Error('No se pudo conectar con el servicio de análisis.');
+    }
+
+    if (!response.ok) {
+      throw new Error('No pudimos consultar el uso de IA.');
+    }
+
+    return (await response.json()) as AiUsageInfo;
   }
 }

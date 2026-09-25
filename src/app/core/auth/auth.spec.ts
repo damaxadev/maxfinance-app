@@ -34,11 +34,14 @@ describe('Auth', () => {
   // referencia, así que mutar currentUser() después de configurar el
   // TestBed sigue siendo visible para el servicio (evita reconfigurar/
   // reinyectar TestBed, que ya está instanciado tras el beforeEach).
-  let firebaseJsAuthStub: { currentUser: { getIdToken: () => Promise<string> } | null };
+  let firebaseJsAuthStub: {
+    currentUser: { getIdToken: () => Promise<string> } | null;
+    authStateReady: () => Promise<void>;
+  };
 
   beforeEach(() => {
     authStateChangeCallback = undefined;
-    firebaseJsAuthStub = { currentUser: null };
+    firebaseJsAuthStub = { currentUser: null, authStateReady: vi.fn().mockResolvedValue(undefined) };
     vi.mocked(FirebaseAuthentication.getCurrentUser).mockReset().mockResolvedValue({ user: null });
     vi.mocked(FirebaseAuthentication.addListener)
       .mockReset()
@@ -130,6 +133,30 @@ describe('Auth', () => {
 
       await expect(service.getIdToken()).resolves.toBe('fake-id-token');
       expect(mockGetIdToken).toHaveBeenCalled();
+    });
+
+    // Regresión: el bug reportado era "No hay una sesión activa" en
+    // Ajustes ("Uso de IA") con el usuario ya logueado — currentUser se
+    // leía ANTES de que el SDK web terminara de restaurar su sesión. Este
+    // test simula esa carrera exacta: currentUser sigue null cuando se
+    // llama a getIdToken(), y solo se puebla justo antes de que
+    // authStateReady() resuelva (como pasaría con la restauración real del
+    // SDK al arrancar la app). Sin el await a authStateReady() en el fix,
+    // este test fallaría (devolvería null en vez del token).
+    it('waits for the Firebase JS SDK to finish restoring its session before reading currentUser', async () => {
+      let resolveAuthStateReady!: () => void;
+      firebaseJsAuthStub.authStateReady = vi.fn(
+        () => new Promise<void>((resolve) => (resolveAuthStateReady = resolve))
+      );
+      const mockGetIdToken = vi.fn().mockResolvedValue('fake-id-token');
+
+      const promise = service.getIdToken();
+      // currentUser sigue null en este punto — si getIdToken() lo leyera
+      // sin esperar, ya habría decidido devolver null.
+      firebaseJsAuthStub.currentUser = { getIdToken: mockGetIdToken };
+      resolveAuthStateReady();
+
+      await expect(promise).resolves.toBe('fake-id-token');
     });
   });
 });
