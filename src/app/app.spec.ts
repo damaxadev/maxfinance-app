@@ -6,11 +6,15 @@ import { vi } from 'vitest';
 import { signal } from '@angular/core';
 
 import { App } from './app';
+import { GroupDetailState } from './core/group-detail-state/group-detail-state';
 import { NotificationBannerState } from './core/notification-banner-state/notification-banner-state';
 import { Notifications } from './core/notifications/notifications';
 import { ThemeService } from './core/theme/theme';
 
-function configure(listenForForegroundMessages: ReturnType<typeof vi.fn>) {
+function configure(
+  listenForForegroundMessages: ReturnType<typeof vi.fn>,
+  listenForNotificationTaps: ReturnType<typeof vi.fn> = vi.fn()
+) {
   return TestBed.configureTestingModule({
     imports: [App],
     providers: [
@@ -18,7 +22,11 @@ function configure(listenForForegroundMessages: ReturnType<typeof vi.fn>) {
       provideNoopAnimations(),
       {
         provide: Notifications,
-        useValue: { ensureNotificationChannel: vi.fn().mockResolvedValue(undefined), listenForForegroundMessages },
+        useValue: {
+          ensureNotificationChannel: vi.fn().mockResolvedValue(undefined),
+          listenForForegroundMessages,
+          listenForNotificationTaps,
+        },
       },
       // ThemeService se inyecta al arrancar la app — se stubea acá para no
       // depender de @capacitor/preferences real; su comportamiento se
@@ -54,6 +62,22 @@ describe('App', () => {
     fixture.detectChanges();
 
     expect(listenForForegroundMessages).toHaveBeenCalledWith(expect.any(Function));
+  });
+
+  it('registers a tap listener that opens the tapped group in GroupDetailState', async () => {
+    const listenForNotificationTaps = vi.fn();
+    TestBed.resetTestingModule();
+    await configure(vi.fn(), listenForNotificationTaps);
+
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    expect(listenForNotificationTaps).toHaveBeenCalledWith(expect.any(Function));
+    const onGroupDetailTap = listenForNotificationTaps.mock.calls[0][0] as (groupId: string) => void;
+
+    onGroupDetailTap('group1');
+
+    expect(TestBed.inject(GroupDetailState).groupId()).toBe('group1');
   });
 
   it('shows a toast when a foreground notification arrives, and dismisses it', async () => {

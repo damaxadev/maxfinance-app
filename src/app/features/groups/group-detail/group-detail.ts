@@ -6,7 +6,6 @@ import { switchMap } from 'rxjs';
 
 import { Auth } from '../../../core/auth/auth';
 import { GroupsService, type GroupMemberProfile } from '../../../core/groups/groups';
-import { MovementFormState } from '../../../core/movement-form-state/movement-form-state';
 import { MovementsService } from '../../../core/movements/movements';
 import { SharedExpenseFormState } from '../../../core/shared-expense-form-state/shared-expense-form-state';
 import { isSharedGroup } from '../../../models/group.model';
@@ -29,7 +28,6 @@ export class GroupDetail {
   private readonly auth = inject(Auth);
   private readonly fb = inject(FormBuilder);
   private readonly sharedExpenseFormState = inject(SharedExpenseFormState);
-  private readonly movementFormState = inject(MovementFormState);
 
   readonly groupId = input.required<string>();
   readonly left = output<void>();
@@ -259,14 +257,12 @@ export class GroupDetail {
     this.inviteSectionExpanded.update((expanded) => !expanded);
   }
 
+  // "+ Agregar gasto" siempre abre el formulario estándar de gasto
+  // compartido, sin importar el type del grupo — incluido uno personal
+  // de un solo miembro (ver Fase 9, corrección posterior al primer intento
+  // de esta feature, que sí tenía una rama especial acá).
   addExpense(): void {
-    if (this.isSharedGroup()) {
-      this.sharedExpenseFormState.openCreate(this.groupId());
-    } else {
-      // Grupo personal: formulario simple de movimiento, no el de gasto
-      // compartido — nunca lleva paidBy/splitType/splits (DATABASE.md).
-      this.movementFormState.openCreate(this.groupId());
-    }
+    this.sharedExpenseFormState.openCreate(this.groupId());
   }
 
   private markJustInvited(uid: string): void {

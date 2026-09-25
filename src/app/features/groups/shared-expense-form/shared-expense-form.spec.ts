@@ -8,6 +8,7 @@ import { Auth } from '../../../core/auth/auth';
 import { Categories } from '../../../core/categories/categories';
 import { GroupsService } from '../../../core/groups/groups';
 import { MovementsService } from '../../../core/movements/movements';
+import { SharedExpenseFormState } from '../../../core/shared-expense-form-state/shared-expense-form-state';
 import { SharedExpenseForm } from './shared-expense-form';
 
 async function flushMicrotasks(): Promise<void> {
@@ -273,6 +274,22 @@ describe('SharedExpenseForm', () => {
     const button: HTMLButtonElement = fixture.nativeElement.querySelector('.mfx-form__actions button');
     expect(button.disabled).toBe(true);
   });
+
+  // Fase 9 (adaptación de copy/UI para grupos de un solo miembro): con 2+
+  // miembros nada cambia — cobertura explícita para no regresarlo.
+  it('is not the personal flow with 2+ members — both sections render, button says "compartido"', () => {
+    expect(component.isPersonalFlow()).toBe(false);
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('¿Quién pagó?');
+    expect(text).toContain('División');
+
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector('.mfx-form__actions button');
+    expect(button.textContent?.trim()).toBe('Agregar gasto compartido');
+  });
+
+  it('publishes isPersonalFlow() into SharedExpenseFormState (Shell reads it for the modal title)', () => {
+    expect(TestBed.inject(SharedExpenseFormState).isPersonalFlow()).toBe(false);
+  });
 });
 
 describe('SharedExpenseForm without an active group', () => {
@@ -300,42 +317,72 @@ describe('SharedExpenseForm without an active group', () => {
   });
 });
 
-// Fase 9: GroupDetail/Groups ya enrutan a MovementForm para un grupo
-// personal, así que este caso solo puede llegar por el FAB ("Agregar gasto
-// compartido"), que no fija un groupId y cae al grupo activo.
-describe('SharedExpenseForm with a personal group active (Fase 9 guard)', () => {
+// Fase 9 (corrección posterior al primer intento de "grupos personales"):
+// "+ Agregar gasto" en CUALQUIER grupo abre este mismo formulario — con un
+// solo miembro, solo cambia la presentación (título, secciones visibles,
+// texto del botón), nunca la lógica de guardado.
+describe('SharedExpenseForm with a single-member group (Fase 9, personal-flow UI)', () => {
+  let component: SharedExpenseForm;
   let fixture: ComponentFixture<SharedExpenseForm>;
+  let createShared: ReturnType<typeof vi.fn>;
 
-  const personalGroup = {
-    id: 'group-personal',
-    name: 'Ahorros',
-    members: ['u1'],
-    createdBy: 'u1',
-    createdAt: {} as never,
-    type: 'personal' as const,
-  };
+  const soloMember = [{ uid: 'u1', displayName: 'Diego', email: 'diego@example.com', photoURL: '' }];
 
   beforeEach(async () => {
+    createShared = vi.fn().mockResolvedValue(undefined);
+
     await TestBed.configureTestingModule({
       imports: [SharedExpenseForm],
       providers: [
-        { provide: MovementsService, useValue: { createShared: vi.fn() } },
+        { provide: MovementsService, useValue: { createShared } },
         { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
         { provide: Categories, useValue: { categories$: of(fakeCategories) } },
-        { provide: GroupsService, useValue: { getMemberProfiles: vi.fn().mockResolvedValue([]), groups$: of([personalGroup]) } },
+        { provide: GroupsService, useValue: { getMemberProfiles: vi.fn().mockResolvedValue(soloMember) } },
         { provide: Auth, useValue: { currentUser: { uid: 'u1' } } },
       ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(SharedExpenseForm);
+    component = fixture.componentInstance;
     TestBed.inject(ActiveGroup).select('group-personal');
     fixture.detectChanges();
     await flushMicrotasks();
     fixture.detectChanges();
   });
 
-  it('shows a guard message instead of the split form, and never renders it', () => {
-    expect(fixture.nativeElement.textContent).toContain('Este es un grupo personal');
-    expect(fixture.nativeElement.querySelector('form')).toBeNull();
+  it('detects the personal flow and publishes it to SharedExpenseFormState', () => {
+    expect(component.isPersonalFlow()).toBe(true);
+    expect(TestBed.inject(SharedExpenseFormState).isPersonalFlow()).toBe(true);
+  });
+
+  it('hides "¿Quién pagó?" and "División", keeps Monto/Categoría/Fecha/Nota', () => {
+    const text = fixture.nativeElement.textContent;
+    expect(text).not.toContain('¿Quién pagó?');
+    expect(text).not.toContain('División');
+    expect(text).toContain('Monto');
+    expect(text).toContain('Categoría');
+    expect(text).toContain('Fecha');
+    expect(text).toContain('Nota');
+  });
+
+  it('labels the submit button "Agregar gasto", not "Agregar gasto compartido"', () => {
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector('.mfx-form__actions button');
+    expect(button.textContent?.trim()).toBe('Agregar gasto');
+  });
+
+  it('still saves paidBy = the sole member with an implicit 100% equal split', async () => {
+    component.form.controls.amount.setValue(50000);
+    component.form.controls.accountId.setValue('acc1');
+    component.form.controls.categoryId.setValue('cat-expense');
+
+    await component.submit();
+
+    expect(createShared).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paidBy: 'u1',
+        splitType: 'equal',
+        splits: [{ uid: 'u1', amount: 50000, settled: false }],
+      })
+    );
   });
 });

@@ -27,6 +27,7 @@ const ASKED_KEY = 'mfx-notifications-asked';
 // no pide permiso ni le muestra nada al usuario todavía.
 export const RECURRING_PAYMENTS_CHANNEL_ID = 'recurring-payments';
 export const MONTHLY_INSIGHT_CHANNEL_ID = 'monthly-insight';
+export const GROUP_ACTIVITY_CHANNEL_ID = 'group-activity';
 
 @Injectable({
   providedIn: 'root',
@@ -54,6 +55,12 @@ export class Notifications {
         id: MONTHLY_INSIGHT_CHANNEL_ID,
         name: 'Resumen mensual',
         description: 'Aviso cuando tu resumen mensual generado por IA está listo.',
+        importance: Importance.Default,
+      }),
+      this.createChannelSafely({
+        id: GROUP_ACTIVITY_CHANNEL_ID,
+        name: 'Actividad de grupos',
+        description: 'Avisos cuando te agregan a un grupo o te asignan un gasto compartido.',
         importance: Importance.Default,
       }),
     ]);
@@ -84,6 +91,24 @@ export class Notifications {
         title: event.notification.title ?? 'MaxFinance',
         body: event.notification.body ?? '',
       });
+    });
+  }
+
+  // Caso background/cerrada: el usuario tocó la notificación del sistema
+  // para abrir la app — a diferencia de notificationReceived (que solo
+  // dispara con la app ya abierta), este evento sí llega aunque la app
+  // estuviera completamente cerrada (el plugin encola el tap que lanzó la
+  // app y lo entrega apenas se registra este listener al arrancar). El
+  // campo "data" lo agrega el servidor (ver functions/src/index.ts,
+  // sendPushNotification) solo en las notificaciones que sí llevan a un
+  // grupo — las de recurrentes/resumen mensual no lo traen, así que ahí
+  // este callback simplemente no se dispara.
+  listenForNotificationTaps(onGroupDetailTap: (groupId: string) => void): void {
+    void FirebaseMessaging.addListener('notificationActionPerformed', (event) => {
+      const data = event.notification.data as Record<string, string> | undefined;
+      if (data?.['type'] === 'group-detail' && data['groupId']) {
+        onGroupDetailTap(data['groupId']);
+      }
     });
   }
 

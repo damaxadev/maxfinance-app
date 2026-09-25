@@ -8,7 +8,7 @@ import { Auth } from '../../../core/auth/auth';
 import { Categories } from '../../../core/categories/categories';
 import { GroupsService, type GroupMemberProfile } from '../../../core/groups/groups';
 import { MovementsService } from '../../../core/movements/movements';
-import { isSharedGroup } from '../../../models/group.model';
+import { SharedExpenseFormState } from '../../../core/shared-expense-form-state/shared-expense-form-state';
 import type { MovementSplit, SplitType } from '../../../models/movement.model';
 import { Avatar } from '../../../shared/avatar/avatar';
 import { MfxCurrencyInputDirective } from '../../../shared/currency/currency-input.directive';
@@ -74,6 +74,7 @@ export class SharedExpenseForm {
   private readonly activeGroup = inject(ActiveGroup);
   private readonly auth = inject(Auth);
   private readonly fb = inject(FormBuilder);
+  private readonly sharedExpenseFormState = inject(SharedExpenseFormState);
 
   readonly saved = output<void>();
 
@@ -84,23 +85,6 @@ export class SharedExpenseForm {
   readonly groupId = computed(() => this.fixedGroupId() ?? this.activeGroup.groupId());
   readonly currentUid = computed(() => this.auth.currentUser?.uid ?? null);
 
-  // Este formulario nunca debería abrirse contra un grupo type: 'personal'
-  // (GroupDetail y la tarjeta de Grupos ya enrutan a MovementForm en ese
-  // caso — ver DATABASE.md, "Gasto en grupo personal") — pero el FAB
-  // ("Agregar gasto compartido") no fija un groupId, así que puede caer acá
-  // igual si ese es el grupo activo. Guarda defensiva para no crear un
-  // SharedMovement (con paidBy/splitType/splits) contra un grupo que nunca
-  // debe tenerlos.
-  private readonly groups = toSignal(this.groupsService.groups$, { initialValue: [] });
-  readonly isPersonalGroup = computed(() => {
-    const id = this.groupId();
-    if (!id) {
-      return false;
-    }
-    const group = this.groups().find((g) => g.id === id);
-    return !!group && !isSharedGroup(group);
-  });
-
   readonly splitTypes = SPLIT_TYPES;
   readonly accounts = toSignal(this.accountsService.accounts$, { initialValue: [] });
   readonly categories = toSignal(this.categoriesService.categories$, { initialValue: [] });
@@ -109,6 +93,14 @@ export class SharedExpenseForm {
   readonly members = signal<GroupMemberProfile[]>([]);
   readonly membersLoading = signal(false);
   readonly membersError = signal<string | null>(null);
+
+  // Un solo miembro (grupo type: 'personal', o uno type: 'shared' que
+  // todavía no ha invitado a nadie) — mismo criterio que se usó al
+  // diagnosticar el fix anterior. Solo cambia presentación (título,
+  // qué secciones se muestran, texto del botón): paidBy/splitType/splits
+  // se siguen guardando igual (ver submit()), el único miembro pagando el
+  // 100% con división "igual" implícita.
+  readonly isPersonalFlow = computed(() => this.members().length === 1);
 
   readonly saving = signal(false);
   readonly errorMessage = signal<string | null>(null);
@@ -204,6 +196,13 @@ export class SharedExpenseForm {
       const splitType = this.splitTypeValue();
       const members = this.members();
       this.rebuildSplitInputs(splitType, members);
+    });
+
+    // Shell necesita saber esto para el título del modal (ver
+    // SharedExpenseFormState.isPersonalFlow) — no lo puede calcular él
+    // mismo, el conteo de miembros solo se conoce acá tras el fetch async.
+    effect(() => {
+      this.sharedExpenseFormState.setPersonalFlow(this.isPersonalFlow());
     });
   }
 

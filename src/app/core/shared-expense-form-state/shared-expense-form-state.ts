@@ -20,8 +20,20 @@ export class SharedExpenseFormState {
   private readonly _request = signal<SharedExpenseFormRequest | null>(null);
   readonly request = this._request.asReadonly();
 
+  // SharedExpenseForm lo actualiza una vez que sabe cuántos miembros tiene
+  // el grupo (fetch async, ver getMemberProfiles) — Shell lo lee para el
+  // título del modal, ya que Shell mismo no tiene esa info de antemano
+  // (mismo patrón que CategoryFormState.lastSaved).
+  private readonly _isPersonalFlow = signal(false);
+  readonly isPersonalFlow = this._isPersonalFlow.asReadonly();
+
   openCreate(groupId?: string): void {
     this._request.set({ groupId: groupId ?? null });
+    this._isPersonalFlow.set(false);
+  }
+
+  setPersonalFlow(value: boolean): void {
+    this._isPersonalFlow.set(value);
   }
 
   close(): void {

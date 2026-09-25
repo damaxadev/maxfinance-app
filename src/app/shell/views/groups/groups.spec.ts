@@ -8,7 +8,6 @@ import { GroupsService } from '../../../core/groups/groups';
 import { ActiveGroup } from '../../../core/active-group/active-group';
 import { GroupDetailState } from '../../../core/group-detail-state/group-detail-state';
 import { GroupFormState } from '../../../core/group-form-state/group-form-state';
-import { MovementFormState } from '../../../core/movement-form-state/movement-form-state';
 import { SharedExpenseFormState } from '../../../core/shared-expense-form-state/shared-expense-form-state';
 
 const group1 = { id: 'group1', name: 'Apartamento', members: ['u1', 'u2'], createdBy: 'u1', createdAt: {} as never };
@@ -192,8 +191,9 @@ describe('Groups', () => {
     expect(stopPropagation).toHaveBeenCalled();
   });
 
-  it('addExpense() on a personal group opens the plain movement form instead (Fase 9)', () => {
-    const movementFormState = TestBed.inject(MovementFormState);
+  // Fase 9 (corrección posterior): siempre el formulario estándar de gasto
+  // compartido, sin importar el type del grupo.
+  it('addExpense() on a personal group opens the standard shared-expense form too', () => {
     const sharedExpenseFormState = TestBed.inject(SharedExpenseFormState);
     groups$.next([personalGroup]);
     fixture.detectChanges();
@@ -201,7 +201,6 @@ describe('Groups', () => {
 
     component.addExpense(personalGroup, event);
 
-    expect(movementFormState.request()).toEqual({ mode: 'create', groupId: 'group-personal' });
-    expect(sharedExpenseFormState.request()).toBeNull();
+    expect(sharedExpenseFormState.request()).toEqual({ groupId: 'group-personal' });
   });
 });

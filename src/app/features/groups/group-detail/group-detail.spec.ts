@@ -6,7 +6,6 @@ import { Accounts } from '../../../core/accounts/accounts';
 import { Auth } from '../../../core/auth/auth';
 import { Categories } from '../../../core/categories/categories';
 import { GroupsService } from '../../../core/groups/groups';
-import { MovementFormState } from '../../../core/movement-form-state/movement-form-state';
 import { MovementsService } from '../../../core/movements/movements';
 import { SettlementsService } from '../../../core/settlements/settlements';
 import { SharedExpenseFormState } from '../../../core/shared-expense-form-state/shared-expense-form-state';
@@ -473,14 +472,16 @@ describe('GroupDetail with a personal group (Fase 9)', () => {
     expect(fixture.nativeElement.querySelector('mfx-group-activity')).toBeTruthy();
   });
 
-  it('addExpense() opens the plain movement form tagged to this group, not the shared-expense form', () => {
-    const movementFormState = TestBed.inject(MovementFormState);
+  // Fase 9 (corrección posterior): "+ Agregar gasto" siempre abre el
+  // formulario estándar de gasto compartido, sin importar el type del
+  // grupo — un intento anterior de esta feature sí tenía una rama especial
+  // acá (MovementForm para grupos personales), ya revertida.
+  it('addExpense() opens the standard shared-expense form, same as for a shared group', () => {
     const sharedExpenseFormState = TestBed.inject(SharedExpenseFormState);
 
     component.addExpense();
 
-    expect(movementFormState.request()).toEqual({ mode: 'create', groupId: 'group-personal' });
-    expect(sharedExpenseFormState.request()).toBeNull();
+    expect(sharedExpenseFormState.request()).toEqual({ groupId: 'group-personal' });
   });
 });
 
