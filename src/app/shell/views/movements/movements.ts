@@ -7,6 +7,7 @@ import { Card } from '../../../shared/card/card';
 import { AnimatedNumber } from '../../../shared/animated-number/animated-number';
 import { Accounts, type AccountWithId } from '../../../core/accounts/accounts';
 import { Categories } from '../../../core/categories/categories';
+import { GroupDetailState } from '../../../core/group-detail-state/group-detail-state';
 import { GroupsService } from '../../../core/groups/groups';
 import {
   MovementsService,
@@ -32,11 +33,13 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 export interface MovementListItem {
   kind: 'personal' | 'shared';
   id: string;
-  categoryId: string;
+  // null solo posible en 'shared' (categoría opcional en gastos compartidos).
+  categoryId: string | null;
   amount: number;
   type: MovementType;
   date: Timestamp;
   accountId: string | null;
+  groupId: string | null;
   groupName: string | null;
   // Un grupo personal solo muestra su nombre como etiqueta, sin la palabra
   // "Compartido" — ver DATABASE.md, "Grupos personales".
@@ -56,6 +59,7 @@ export class Movements {
   private readonly movementsService = inject(MovementsService);
   private readonly groupsService = inject(GroupsService);
   private readonly accountFormState = inject(AccountFormState);
+  private readonly groupDetailState = inject(GroupDetailState);
   readonly movementFormState = inject(MovementFormState);
 
   readonly accounts = toSignal(this.accountsService.accounts$, { initialValue: [] });
@@ -94,6 +98,7 @@ export class Movements {
       type: m.type,
       date: m.date,
       accountId: m.accountId,
+      groupId: m.groupId,
       groupName: null,
       groupIsShared: false,
       personal: m,
@@ -106,6 +111,7 @@ export class Movements {
       type: m.type,
       date: m.date,
       accountId: m.accountId ?? null,
+      groupId: m.groupId,
       groupName: this.groupsById().get(m.groupId)?.name ?? 'Grupo',
       groupIsShared: isSharedGroup(this.groupsById().get(m.groupId)),
       personal: null,
@@ -132,15 +138,28 @@ export class Movements {
     return ACCOUNT_TYPE_LABELS[type];
   }
 
-  accountName(accountId: string): string {
+  accountName(accountId: string | null): string {
+    if (accountId === null) {
+      return 'Sin cuenta';
+    }
     return this.accountsById().get(accountId)?.name ?? 'Cuenta eliminada';
   }
 
-  categoryIcon(categoryId: string): string {
+  // Join en vivo contra `categories` sigue siendo correcto acá (a diferencia
+  // de GroupActivity): esta vista solo lista gastos compartidos que el
+  // propio usuario registró, nunca de otro miembro, así que su categoría
+  // personalizada siempre es visible para sí mismo (ver Categories.categories$).
+  categoryIcon(categoryId: string | null): string {
+    if (categoryId === null) {
+      return '🗂️';
+    }
     return this.categoriesById().get(categoryId)?.icon ?? '❓';
   }
 
-  categoryName(categoryId: string): string {
+  categoryName(categoryId: string | null): string {
+    if (categoryId === null) {
+      return 'Sin categoría';
+    }
     return this.categoriesById().get(categoryId)?.name ?? 'Categoría eliminada';
   }
 
@@ -156,7 +175,14 @@ export class Movements {
     this.accountFormState.openEdit(account);
   }
 
+  // Un ítem de grupo (gasto compartido, o personal etiquetado a un grupo
+  // personal) abre el detalle de ESE grupo — antes 'shared' no abría nada.
+  // Personal sin grupo mantiene su comportamiento de siempre: editar.
   editMovement(item: MovementListItem): void {
+    if (item.groupId) {
+      this.groupDetailState.open(item.groupId);
+      return;
+    }
     if (item.personal) {
       this.movementFormState.openEdit(item.personal);
     }

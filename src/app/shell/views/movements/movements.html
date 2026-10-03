@@ -64,7 +64,7 @@
                   {{ movement.groupIsShared ? 'Compartido · ' : '' }}{{ movement.groupName }} · {{ formatDate(movement.date) }}
                 </span>
               } @else {
-                <span class="mfx-movements__item-account">{{ accountName(movement.accountId ?? '') }} · {{ formatDate(movement.date) }}</span>
+                <span class="mfx-movements__item-account">{{ accountName(movement.accountId) }} · {{ formatDate(movement.date) }}</span>
               }
             </div>
           </div>

@@ -27,10 +27,15 @@ vi.mock('@angular/fire/firestore', () => ({
   deleteDoc: (...args: unknown[]) => mockDeleteDoc(...args),
   getDocs: (...args: unknown[]) => mockGetDocs(...args),
   arrayRemove: vi.fn((value: unknown) => ({ arrayRemove: value })),
+  arrayUnion: vi.fn((...values: unknown[]) => ({ arrayUnion: values })),
   query: vi.fn((...args: unknown[]) => args),
   where: vi.fn((field: string, op: string, value: unknown) => ({ field, op, value })),
   limit: vi.fn((n: number) => ({ limit: n })),
   serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP'),
+  Timestamp: {
+    now: vi.fn(() => ({ toMillis: () => 0 })),
+    fromDate: vi.fn((date: Date) => ({ toDate: () => date })),
+  },
 }));
 
 vi.mock('@angular/fire/functions', () => ({
@@ -162,5 +167,103 @@ describe('GroupsService', () => {
 
     await expect(service.remove('group1')).rejects.toThrow(/gastos registrados/);
     expect(mockDeleteDoc).not.toHaveBeenCalled();
+  });
+
+  it('refuses to remove a savings goal that still has ledger entries', async () => {
+    mockGetDocs
+      .mockResolvedValueOnce({ empty: true })
+      .mockResolvedValueOnce({ empty: true })
+      .mockResolvedValueOnce({ empty: false });
+
+    await expect(service.remove('goal1')).rejects.toThrow(/gastos registrados/);
+    expect(mockDeleteDoc).not.toHaveBeenCalled();
+  });
+
+  describe('createGoal()', () => {
+    const baseTargetInput = {
+      name: 'Vacaciones',
+      goalMode: 'target' as const,
+      targetAmount: 2000000,
+      celebrationAmount: null,
+      targetDate: null,
+      reminderFrequency: null,
+      reminderSuggestedAmount: null,
+    };
+
+    it('creates a "target" goal with type "savings", the goal fields, current user as sole member/creator, and an empty reachedMilestones', async () => {
+      const id = await service.createGoal(baseTargetInput);
+
+      expect(id).toBe('new-group-id');
+      expect(mockAddDoc).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          name: 'Vacaciones',
+          members: ['u1'],
+          createdBy: 'u1',
+          type: 'savings',
+          goalMode: 'target',
+          targetAmount: 2000000,
+          celebrationAmount: null,
+          reachedMilestones: [],
+          targetDate: null,
+          reminderFrequency: null,
+          reminderSuggestedAmount: null,
+          nextReminderDate: null,
+        })
+      );
+    });
+
+    it('creates an "open-ended" goal with celebrationAmount set and targetAmount null', async () => {
+      await service.createGoal({ ...baseTargetInput, goalMode: 'open-ended', targetAmount: null, celebrationAmount: 1000000 });
+
+      expect(mockAddDoc).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ goalMode: 'open-ended', targetAmount: null, celebrationAmount: 1000000 })
+      );
+    });
+
+    it('sets targetDate as a Timestamp when given', async () => {
+      const targetDate = new Date('2026-12-01T12:00:00');
+      await service.createGoal({ ...baseTargetInput, targetDate });
+
+      const [, value] = mockAddDoc.mock.calls[0];
+      expect(value.targetDate.toDate()).toEqual(targetDate);
+    });
+
+    it('sets nextReminderDate (and keeps reminderSuggestedAmount) only when a reminderFrequency is given', async () => {
+      await service.createGoal({ ...baseTargetInput, reminderFrequency: 'weekly', reminderSuggestedAmount: 50000 });
+
+      expect(mockAddDoc).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          reminderFrequency: 'weekly',
+          reminderSuggestedAmount: 50000,
+          nextReminderDate: expect.anything(),
+        })
+      );
+    });
+
+    it('drops reminderSuggestedAmount when no reminderFrequency is chosen, even if one was passed in', async () => {
+      await service.createGoal({ ...baseTargetInput, reminderSuggestedAmount: 50000 });
+
+      expect(mockAddDoc).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ reminderSuggestedAmount: null, nextReminderDate: null })
+      );
+    });
+  });
+
+  describe('markMilestonesReached()', () => {
+    it('adds the given milestones to reachedMilestones via arrayUnion', async () => {
+      await service.markMilestonesReached('goal1', [50, 75]);
+
+      expect(mockUpdateDoc).toHaveBeenCalledWith(expect.anything(), { reachedMilestones: { arrayUnion: [50, 75] } });
+    });
+
+    it('does nothing (no Firestore write) when there are no new milestones', async () => {
+      await service.markMilestonesReached('goal1', []);
+
+      expect(mockUpdateDoc).not.toHaveBeenCalled();
+    });
   });
 });

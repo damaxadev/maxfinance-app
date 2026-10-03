@@ -51,4 +51,36 @@
       </mfx-card>
     }
   }
+
+  <div class="mfx-section-header">
+    <h2>Metas</h2>
+    <button type="button" class="mfx-section-add" (click)="goalFormState.openCreate()">+ Meta</button>
+  </div>
+
+  @if (goals().length === 0) {
+    <mfx-card [index]="0">
+      <p>Todavía no tienes ninguna meta de ahorro. Crea la primera para empezar a guardar.</p>
+    </mfx-card>
+  } @else {
+    @for (goal of goals(); track goal.id; let i = $index) {
+      <mfx-card [index]="i" (click)="openDetail(goal)">
+        <div class="mfx-groups__goal">
+          <mfx-progress-ring [percentage]="goalProgressPercent(goal)" [size]="44" [strokeWidth]="5" />
+          <div class="mfx-groups__goal-info">
+            <span class="mfx-groups__name">{{ goal.name }}</span>
+            <span class="mfx-groups__goal-target">
+              @if (goal.goalMode === 'open-ended') {
+                Celebra cada {{ goal.celebrationAmount | mfxCurrency }}
+              } @else {
+                Meta: {{ goal.targetAmount | mfxCurrency }}
+              }
+            </span>
+          </div>
+          <button type="button" class="mfx-groups__add-expense" (click)="addGoalEntry(goal, $event)">
+            + Aporte/retiro
+          </button>
+        </div>
+      </mfx-card>
+    }
+  }
 </section>

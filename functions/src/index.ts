@@ -30,6 +30,7 @@ const WORKER_URL = 'https://maxfinance-worker.damaxa134.workers.dev';
 const RECURRING_PAYMENTS_CHANNEL_ID = 'recurring-payments';
 const MONTHLY_INSIGHT_CHANNEL_ID = 'monthly-insight';
 const GROUP_ACTIVITY_CHANNEL_ID = 'group-activity';
+const SAVINGS_GOAL_CHANNEL_ID = 'savings-goal';
 
 interface UserProfile {
   uid: string;
@@ -463,6 +464,18 @@ export const processRecurringPayments = onSchedule(
         channelId: RECURRING_PAYMENTS_CHANNEL_ID,
       });
     }
+
+    // Cuotas de gasto compartido — mismo chequeo diario, reusando el mismo
+    // reminderStart/reminderEnd de arriba (ver remindPendingInstallments).
+    await remindPendingInstallments(firestore, reminderStart, reminderEnd);
+
+    // Metas de ahorro — mismo chequeo diario, agregado ACÁ adentro por el
+    // mismo motivo que remindPendingInstallments (ver su comentario): no
+    // crear un segundo Cloud Scheduler. A diferencia de los recordatorios
+    // de arriba (que avisan 3 días ANTES de una fecha fija), esto es "hoy
+    // toca aportar" — un recordatorio periódico sin fecha límite, así que
+    // usa `now`, no una ventana de días.
+    await remindSavingsGoalContributions(firestore, now);
   }
 );
 
@@ -742,3 +755,186 @@ export const notifySharedExpenseAssigned = onDocumentCreated({ document: 'moveme
     )
   );
 });
+
+interface InstallmentData {
+  dueDate: Timestamp;
+  amount: number;
+  status: string;
+}
+
+interface PayInstallmentRequest {
+  movementId: string;
+  installmentIndex: number;
+  note?: string;
+}
+
+interface PayInstallmentResponse {
+  settlementId: string;
+}
+
+// Paga una cuota específica de un plan de cuotas (ver DATABASE.md, "Pagos a
+// cuotas") — crea el settlement parcial Y marca esa cuota como pagada en el
+// movement de origen, atómico (una transacción), para que nunca queden
+// desalineados. Corre server-side porque actualizar installments[i] en el
+// movement requiere escribir un documento que el deudor no necesariamente
+// "posee" (uid == quien registró el gasto, no necesariamente el deudor) —
+// la regla de movements solo permite update a isOwner(uid). A diferencia de
+// SettlementsService.create() (cliente), esta vía no soporta "registrar
+// también como movimiento personal" — no se pidió para cuotas, y evita
+// duplicar esa lógica acá.
+export const payInstallment = onCall({ region: REGION }, async (request): Promise<PayInstallmentResponse> => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError('unauthenticated', 'Debes iniciar sesión.');
+  }
+
+  const data = request.data as PayInstallmentRequest;
+  const movementId = data?.movementId?.trim();
+  const installmentIndex = data?.installmentIndex;
+  if (!movementId || typeof installmentIndex !== 'number') {
+    throw new HttpsError('invalid-argument', 'Falta el gasto o el número de cuota.');
+  }
+  const note = data?.note ?? '';
+
+  const firestore = getFirestore();
+  const movementRef = firestore.collection('movements').doc(movementId);
+  const settlementRef = firestore.collection('settlements').doc();
+
+  return firestore.runTransaction(async (tx) => {
+    const movementSnap = await tx.get(movementRef);
+    if (!movementSnap.exists) {
+      throw new HttpsError('not-found', 'El gasto no existe.');
+    }
+    const movement = movementSnap.data()!;
+    const groupId = movement['groupId'] as string | undefined;
+    const paidBy = movement['paidBy'] as string | undefined;
+    const splits = (movement['splits'] as MovementSplitForNotify[] | undefined) ?? [];
+    const installments = movement['installments'] as InstallmentData[] | undefined;
+
+    if (!groupId || !paidBy || !installments) {
+      throw new HttpsError('failed-precondition', 'Este gasto no tiene un plan de cuotas.');
+    }
+    const debtor = splits.find((split) => split.uid !== paidBy);
+    if (!debtor) {
+      throw new HttpsError('failed-precondition', 'No hay un deudor en este gasto.');
+    }
+    if (uid !== paidBy && uid !== debtor.uid) {
+      throw new HttpsError('permission-denied', 'No eres parte de esta deuda.');
+    }
+    const installment = installments[installmentIndex];
+    if (!installment) {
+      throw new HttpsError('not-found', 'Esa cuota no existe.');
+    }
+    if (installment.status === 'paid') {
+      throw new HttpsError('failed-precondition', 'Esa cuota ya está pagada.');
+    }
+
+    const nextInstallments = installments.map((inst, index) =>
+      index === installmentIndex ? { ...inst, status: 'paid' } : inst
+    );
+    const stillPending = nextInstallments.some((inst) => inst.status === 'pending');
+
+    tx.set(settlementRef, {
+      groupId,
+      fromUid: debtor.uid,
+      toUid: paidBy,
+      amount: installment.amount,
+      date: Timestamp.now(),
+      note,
+      linkedMovementId: null,
+    });
+    tx.update(movementRef, {
+      installments: nextInstallments,
+      hasPendingInstallments: stillPending,
+    });
+
+    return { settlementId: settlementRef.id };
+  });
+});
+
+// Mismo chequeo diario que los recordatorios de recurrentes (ver
+// processRecurringPayments arriba) — agregado ACÁ adentro a propósito, no
+// como un segundo onSchedule, para no crear un Cloud Scheduler nuevo (ver
+// DATABASE.md, "Pagos a cuotas"). hasPendingInstallments es un campo
+// denormalizado (ver SharedMovement) que evita traer TODOS los movements
+// solo para revisar si tienen cuotas.
+async function remindPendingInstallments(firestore: Firestore, reminderStart: Timestamp, reminderEnd: Timestamp): Promise<void> {
+  const installmentsSnap = await firestore.collection('movements').where('hasPendingInstallments', '==', true).get();
+  console.log(`[remindPendingInstallments] ${installmentsSnap.size} gasto(s) con cuotas pendientes`);
+
+  for (const movementDoc of installmentsSnap.docs) {
+    const movement = movementDoc.data();
+    const groupId = movement['groupId'] as string | undefined;
+    const paidBy = movement['paidBy'] as string | undefined;
+    const splits = (movement['splits'] as MovementSplitForNotify[] | undefined) ?? [];
+    const installments = movement['installments'] as InstallmentData[] | undefined;
+    if (!groupId || !paidBy || !installments) {
+      continue;
+    }
+    const debtor = splits.find((split) => split.uid !== paidBy);
+    if (!debtor) {
+      continue;
+    }
+
+    for (let index = 0; index < installments.length; index++) {
+      const installment = installments[index];
+      if (installment.status !== 'pending') {
+        continue;
+      }
+      const dueMillis = installment.dueDate.toMillis();
+      if (dueMillis < reminderStart.toMillis() || dueMillis >= reminderEnd.toMillis()) {
+        continue;
+      }
+      await sendPushNotification(firestore, debtor.uid, {
+        title: 'Cuota próxima a vencer',
+        body: `Tu cuota ${index + 1} de ${installments.length} vence en 3 días: $${installment.amount.toLocaleString('es-CO')}`,
+        channelId: RECURRING_PAYMENTS_CHANNEL_ID,
+        data: { type: 'group-detail', groupId },
+      });
+    }
+  }
+}
+
+// Mismo chequeo diario que los recordatorios de arriba — agregado ACÁ
+// adentro a propósito, no como un segundo onSchedule (ver
+// remindPendingInstallments). Un solo filtro de rango sobre
+// nextReminderDate basta, sin necesitar un índice compuesto ni un segundo
+// filtro por type: ningún otro type de grupo llega a tener ese campo (ver
+// group.model.ts), así que el resultado ya viene acotado a metas con
+// recordatorio configurado. Notifica a TODOS los miembros del grupo (una
+// meta puede ser personal o compartida) y avanza nextReminderDate con la
+// misma advanceNextDate que ya usan los recurrentes.
+async function remindSavingsGoalContributions(firestore: Firestore, now: Timestamp): Promise<void> {
+  const dueSnap = await firestore.collection('groups').where('nextReminderDate', '<=', now).get();
+  console.log(`[remindSavingsGoalContributions] ${dueSnap.size} meta(s) con recordatorio de aporte vencido`);
+
+  for (const groupDoc of dueSnap.docs) {
+    const group = groupDoc.data();
+    const frequency = group['reminderFrequency'] as string | undefined;
+    const members = (group['members'] as string[] | undefined) ?? [];
+    const nextReminderDate = group['nextReminderDate'] as Timestamp | undefined;
+    if (!frequency || !nextReminderDate || members.length === 0) {
+      continue;
+    }
+
+    const name = (group['name'] as string) ?? 'tu meta';
+    const suggestedAmount = group['reminderSuggestedAmount'] as number | null | undefined;
+    const body = suggestedAmount
+      ? `Hora de aportar a "${name}" — monto sugerido: $${suggestedAmount.toLocaleString('es-CO')}`
+      : `Hora de aportar a tu meta "${name}"`;
+
+    await Promise.all(
+      members.map((uid) =>
+        sendPushNotification(firestore, uid, {
+          title: 'Aporte a tu meta de ahorro',
+          body,
+          channelId: SAVINGS_GOAL_CHANNEL_ID,
+          data: { type: 'group-detail', groupId: groupDoc.id },
+        })
+      )
+    );
+
+    const newNextDate = advanceNextDate(nextReminderDate.toDate(), frequency);
+    await groupDoc.ref.update({ nextReminderDate: Timestamp.fromDate(newNextDate) });
+  }
+}

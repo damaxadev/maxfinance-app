@@ -1,5 +1,7 @@
-import { Component, input, output } from '@angular/core';
+import { Component, DestroyRef, inject, input, output } from '@angular/core';
 import { animate, style, transition, trigger } from '@angular/animations';
+
+import { ModalStack } from '../../core/modal-stack/modal-stack';
 
 @Component({
   selector: 'mfx-modal',
@@ -23,6 +25,20 @@ import { animate, style, transition, trigger } from '@angular/animations';
 export class Modal {
   readonly title = input('');
   readonly closed = output<void>();
+
+  private readonly modalStack = inject(ModalStack);
+
+  constructor() {
+    // Cada instancia se registra al crearse (justo cuando el *FormState la
+    // abre) y se da de baja al destruirse (cuando el *if que la renderiza
+    // se vuelve falso) — así el botón atrás de Android (ver App) siempre
+    // sabe cuál es el modal más reciente, sin que ningún *FormState tenga
+    // que participar. Cubre también un modal anidado dentro de otro (ver
+    // GroupDetail, menú "⋮").
+    const onBack = () => this.close();
+    this.modalStack.push(onBack);
+    inject(DestroyRef).onDestroy(() => this.modalStack.pop(onBack));
+  }
 
   close(): void {
     this.closed.emit();

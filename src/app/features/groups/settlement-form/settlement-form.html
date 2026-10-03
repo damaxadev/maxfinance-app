@@ -1,7 +1,14 @@
 <form class="mfx-form" [formGroup]="form" (ngSubmit)="submit()">
-  <p>
-    {{ isPayer() ? 'Vas a marcar que le pagaste a ' + context().toName : context().fromName + ' te pagó a ti' }}.
-  </p>
+  @if (context().installmentRef; as installmentRef) {
+    <p>
+      Cuota {{ installmentRef.installmentIndex + 1 }} de {{ installmentRef.totalInstallments }} —
+      {{ isPayer() ? 'vas a marcar que le pagaste a ' + context().toName : context().fromName + ' te pagó a ti' }}.
+    </p>
+  } @else {
+    <p>
+      {{ isPayer() ? 'Vas a marcar que le pagaste a ' + context().toName : context().fromName + ' te pagó a ti' }}.
+    </p>
+  }
 
   <label class="mfx-form__field">
     Monto
@@ -22,21 +29,23 @@
     <textarea formControlName="note" placeholder="Opcional"></textarea>
   </label>
 
-  <mfx-checkbox formControlName="registerPersonalMovement">Registrar también como movimiento personal</mfx-checkbox>
+  @if (!isInstallmentPayment()) {
+    <mfx-checkbox formControlName="registerPersonalMovement">Registrar también como movimiento personal</mfx-checkbox>
 
-  @if (form.controls.registerPersonalMovement.value) {
-    <label class="mfx-form__field">
-      Cuenta
-      <select formControlName="accountId">
-        <option value="" disabled>Selecciona una cuenta</option>
-        @for (account of accounts(); track account.id) {
-          <option [value]="account.id">{{ account.name }}</option>
+    @if (form.controls.registerPersonalMovement.value) {
+      <label class="mfx-form__field">
+        Cuenta
+        <select formControlName="accountId">
+          <option value="" disabled>Selecciona una cuenta</option>
+          @for (account of accounts(); track account.id) {
+            <option [value]="account.id">{{ account.name }}</option>
+          }
+        </select>
+        @if (form.controls.accountId.invalid && form.controls.accountId.touched) {
+          <span class="mfx-form__error" role="alert">Selecciona una cuenta.</span>
         }
-      </select>
-      @if (form.controls.accountId.invalid && form.controls.accountId.touched) {
-        <span class="mfx-form__error" role="alert">Selecciona una cuenta.</span>
-      }
-    </label>
+      </label>
+    }
   }
 
   @if (errorMessage()) {
@@ -45,7 +54,7 @@
 
   <div class="mfx-form__actions">
     <button type="submit" class="mfx-btn-primary" [disabled]="saving() || form.invalid">
-      {{ saving() ? 'Guardando…' : 'Marcar como saldada' }}
+      {{ saving() ? 'Guardando…' : isInstallmentPayment() ? 'Marcar cuota como pagada' : 'Marcar como saldada' }}
     </button>
   </div>
 </form>

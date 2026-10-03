@@ -1,0 +1,46 @@
+@if (size() === 'compact') {
+  <div class="mfx-installment-row mfx-installment-row--compact">
+    <div class="mfx-installment-row__top">
+      <span class="mfx-installment-row__indicator" [class.mfx-installment-row__indicator--paid]="isPaid()">
+        {{ isPaid() ? '✓' : index() + 1 }}
+      </span>
+      <span class="mfx-installment-row__title-date">Cuota {{ index() + 1 }} — {{ formattedDate() }}</span>
+      <span class="mfx-installment-row__amount">
+        <mfx-animated-number [value]="installment().amount" />
+      </span>
+    </div>
+
+    @if (isPaid()) {
+      <span class="mfx-installment-row__paid-badge">✓ Pagada</span>
+    } @else if (interactive()) {
+      <button type="button" class="mfx-installment-row__pay-btn" (click)="$event.stopPropagation(); pay.emit()">
+        Marcar como pagada
+      </button>
+    }
+  </div>
+} @else {
+  <div class="mfx-installment-row mfx-installment-row--cozy">
+    <span class="mfx-installment-row__indicator" [class.mfx-installment-row__indicator--paid]="isPaid()">
+      {{ isPaid() ? '✓' : index() + 1 }}
+    </span>
+
+    <div class="mfx-installment-row__body">
+      <div class="mfx-installment-row__heading">
+        <span class="mfx-installment-row__title">Cuota {{ index() + 1 }}</span>
+        <span class="mfx-installment-row__amount">
+          <mfx-animated-number [value]="installment().amount" />
+        </span>
+      </div>
+
+      <span class="mfx-installment-row__date">{{ formattedDate() }}</span>
+
+      @if (isPaid()) {
+        <span class="mfx-installment-row__paid-badge">✓ Pagada</span>
+      } @else if (interactive()) {
+        <button type="button" class="mfx-installment-row__pay-btn" (click)="$event.stopPropagation(); pay.emit()">
+          Marcar como pagada
+        </button>
+      }
+    </div>
+  </div>
+}

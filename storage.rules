@@ -1,0 +1,58 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.uid == 'jigrWtmRAraKgs6aJSS4OMq9gaX2';
+    }
+
+    // Mismo criterio que isGroupMember() en firestore.rules — Storage no
+    // puede reusar esa función directamente (reglas de dos productos
+    // distintos), así que se reimplementa acá leyendo el mismo documento
+    // de groups vía firestore.get().
+    function isGroupMember(groupId) {
+      return isSignedIn() &&
+        request.auth.uid in firestore.get(/databases/(default)/documents/groups/$(groupId)).data.members;
+    }
+
+    // movements/{movementId}/attachment — un solo adjunto por movimiento
+    // (foto de recibo o PDF), reemplazado al subir uno nuevo, nunca
+    // acumulado. Permisos EXACTAMENTE iguales a la regla de Firestore para
+    // movements (ver firestore.rules): leer = lo mismo que leer el
+    // movimiento (dueño si es personal, cualquier miembro del grupo si es
+    // compartido); subir/reemplazar/eliminar = solo quien lo creó.
+    match /movements/{movementId}/attachment {
+      function movement() {
+        return firestore.get(/databases/(default)/documents/movements/$(movementId)).data;
+      }
+
+      allow read: if movement().groupId == null
+        ? isOwner(movement().uid)
+        : isGroupMember(movement().groupId);
+
+      allow write, delete: if isOwner(movement().uid) || isAdmin();
+    }
+
+    // goalEntries/{entryId}/attachment — mismo criterio, mismos permisos
+    // que la regla de Firestore para goalEntries: leer = cualquier
+    // miembro del grupo de la meta; subir/reemplazar/eliminar = solo
+    // quien registró esa entrada del ledger.
+    match /goalEntries/{entryId}/attachment {
+      function goalEntry() {
+        return firestore.get(/databases/(default)/documents/goalEntries/$(entryId)).data;
+      }
+
+      allow read: if isGroupMember(goalEntry().groupId);
+      allow write, delete: if isOwner(goalEntry().uid) || isAdmin();
+    }
+  }
+}

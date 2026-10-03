@@ -1,0 +1,96 @@
+<form class="mfx-form" [formGroup]="form" (ngSubmit)="submit()">
+  <label class="mfx-form__field">
+    Nombre de la meta
+    <input type="text" formControlName="name" placeholder="Ej. Vacaciones, Fondo de emergencia" />
+    @if (form.controls.name.invalid && form.controls.name.touched) {
+      <span class="mfx-form__error" role="alert">
+        @if (form.controls.name.hasError('required')) {
+          El nombre es obligatorio.
+        } @else if (form.controls.name.hasError('minlength')) {
+          El nombre debe tener al menos 2 caracteres.
+        }
+      </span>
+    }
+  </label>
+
+  <div class="mfx-form__field">
+    <span>¿Cómo quieres ahorrar?</span>
+    <div class="mfx-goal-form__modes">
+      @for (option of goalModes; track option.value) {
+        <button
+          type="button"
+          class="mfx-goal-form__mode"
+          [class.mfx-goal-form__mode--active]="goalModeValue() === option.value"
+          (click)="selectGoalMode(option.value)"
+        >
+          <span class="mfx-goal-form__mode-label">{{ option.label }}</span>
+          <span class="mfx-goal-form__mode-description">{{ option.description }}</span>
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (goalModeValue() === 'target') {
+    <label class="mfx-form__field">
+      Monto objetivo
+      <input mfxCurrencyInput formControlName="targetAmount" />
+      @if (form.controls.targetAmount.invalid && form.controls.targetAmount.touched) {
+        <span class="mfx-form__error" role="alert">
+          @if (form.controls.targetAmount.hasError('required')) {
+            El monto objetivo es obligatorio.
+          } @else if (form.controls.targetAmount.hasError('min')) {
+            El monto objetivo debe ser mayor a 0.
+          }
+        </span>
+      }
+    </label>
+
+    <label class="mfx-form__field">
+      Fecha objetivo
+      <input type="date" formControlName="targetDate" />
+      <span class="mfx-goal-form__hint">Opcional</span>
+    </label>
+  } @else {
+    <label class="mfx-form__field">
+      Monto de celebración
+      <input mfxCurrencyInput formControlName="celebrationAmount" />
+      <span class="mfx-goal-form__hint">Celebra cada vez que ahorres este monto. Puedes cambiar la sugerencia.</span>
+      @if (form.controls.celebrationAmount.invalid && form.controls.celebrationAmount.touched) {
+        <span class="mfx-form__error" role="alert">
+          @if (form.controls.celebrationAmount.hasError('required')) {
+            El monto de celebración es obligatorio.
+          } @else if (form.controls.celebrationAmount.hasError('min')) {
+            El monto de celebración debe ser mayor a 0.
+          }
+        </span>
+      }
+    </label>
+  }
+
+  <label class="mfx-form__field">
+    Recordatorio de aporte
+    <select formControlName="reminderFrequency">
+      @for (option of reminderOptions; track option.value) {
+        <option [value]="option.value">{{ option.label }}</option>
+      }
+    </select>
+  </label>
+
+  @if (reminderFrequencyValue() !== 'none') {
+    <label class="mfx-form__field">
+      Monto sugerido para el recordatorio
+      <input mfxCurrencyInput formControlName="reminderSuggestedAmount" />
+      <span class="mfx-goal-form__hint">Opcional</span>
+    </label>
+  }
+
+  @if (errorMessage()) {
+    <p class="mfx-form__error" role="alert">{{ errorMessage() }}</p>
+  }
+
+  <div class="mfx-form__actions">
+    <button type="submit" class="mfx-btn-primary" [disabled]="saving()">
+      {{ saving() ? 'Creando…' : 'Crear meta' }}
+    </button>
+  </div>
+</form>

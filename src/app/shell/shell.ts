@@ -31,6 +31,10 @@ import { SettlementFormState } from '../core/settlement-form-state/settlement-fo
 import { SettlementForm } from '../features/groups/settlement-form/settlement-form';
 import { RecurringPaymentFormState } from '../core/recurring-payment-form-state/recurring-payment-form-state';
 import { RecurringPaymentForm } from '../features/recurring-payments/recurring-payment-form/recurring-payment-form';
+import { GoalFormState } from '../core/goal-form-state/goal-form-state';
+import { GoalForm } from '../features/goals/goal-form/goal-form';
+import { GoalEntryFormState } from '../core/goal-entry-form-state/goal-entry-form-state';
+import { GoalEntryForm } from '../features/goals/goal-entry-form/goal-entry-form';
 
 @Component({
   selector: 'mfx-shell',
@@ -47,6 +51,8 @@ import { RecurringPaymentForm } from '../features/recurring-payments/recurring-p
     SharedExpenseForm,
     SettlementForm,
     RecurringPaymentForm,
+    GoalForm,
+    GoalEntryForm,
     BalancesModal,
     Home,
     Movements,
@@ -69,6 +75,8 @@ export class Shell implements AfterViewInit, OnDestroy {
   readonly sharedExpenseFormState = inject(SharedExpenseFormState);
   readonly settlementFormState = inject(SettlementFormState);
   readonly recurringPaymentFormState = inject(RecurringPaymentFormState);
+  readonly goalFormState = inject(GoalFormState);
+  readonly goalEntryFormState = inject(GoalEntryFormState);
   readonly balancesModalState = inject(BalancesModalState);
   private readonly activeTabState = inject(ActiveTabState);
 

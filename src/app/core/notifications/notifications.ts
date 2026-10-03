@@ -28,6 +28,7 @@ const ASKED_KEY = 'mfx-notifications-asked';
 export const RECURRING_PAYMENTS_CHANNEL_ID = 'recurring-payments';
 export const MONTHLY_INSIGHT_CHANNEL_ID = 'monthly-insight';
 export const GROUP_ACTIVITY_CHANNEL_ID = 'group-activity';
+export const SAVINGS_GOAL_CHANNEL_ID = 'savings-goal';
 
 @Injectable({
   providedIn: 'root',
@@ -61,6 +62,12 @@ export class Notifications {
         id: GROUP_ACTIVITY_CHANNEL_ID,
         name: 'Actividad de grupos',
         description: 'Avisos cuando te agregan a un grupo o te asignan un gasto compartido.',
+        importance: Importance.Default,
+      }),
+      this.createChannelSafely({
+        id: SAVINGS_GOAL_CHANNEL_ID,
+        name: 'Metas de ahorro',
+        description: 'Recordatorios de aporte para tus metas de ahorro.',
         importance: Importance.Default,
       }),
     ]);

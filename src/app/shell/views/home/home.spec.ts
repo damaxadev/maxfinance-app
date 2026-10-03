@@ -1,10 +1,12 @@
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { BehaviorSubject, of } from 'rxjs';
 import { vi } from 'vitest';
 
 import { Home } from './home';
+import { GroupActivity } from '../../../features/groups/group-activity/group-activity';
 import { ActiveTabState } from '../../../core/active-tab-state/active-tab-state';
 import { Accounts } from '../../../core/accounts/accounts';
 import { Auth } from '../../../core/auth/auth';
@@ -260,12 +262,29 @@ describe('Home recentMovements()', () => {
       categoryName: 'Transporte',
       amount: 30,
       type: 'expense',
+      groupId: 'group1',
       groupName: 'Apartamento',
       groupIsShared: true,
       dateLabel: expect.any(String),
     });
     expect(items[1].id).toBe('m-personal');
+    expect(items[1].groupId).toBeNull();
     expect(items[1].groupName).toBeNull();
+  });
+
+  // Antes ningún <mfx-card> de esta lista tenía (click) — tocar un
+  // movimiento de grupo ahora abre el detalle de ESE grupo (ver
+  // openRecentMovement()); uno sin grupo sigue sin hacer nada (no se pidió
+  // cambiar ese caso).
+  it('openRecentMovement(): opens GroupDetail for a grouped item, does nothing for one without a group', () => {
+    const groupDetailState = TestBed.inject(GroupDetailState);
+    const [shared, personal] = component.recentMovements();
+
+    component.openRecentMovement(personal);
+    expect(groupDetailState.groupId()).toBeNull();
+
+    component.openRecentMovement(shared);
+    expect(groupDetailState.groupId()).toBe('group1');
   });
 
   it('labels a movement from a personal group with just the group name, no "Compartido" (Fase 9)', async () => {
@@ -365,6 +384,28 @@ describe('Home "Gastos compartidos recientes" (wiring into GroupActivity)', () =
     expect(component.sharedGroupIds()).toEqual(['group1']);
   });
 
+  it('sharedGroupIds() also excludes savings goals — isSharedGroup() alone says true, but a goal has no movements/settlements to show', async () => {
+    const goal = {
+      id: 'goal1',
+      name: 'Vacaciones',
+      members: ['u1'],
+      createdBy: 'u1',
+      createdAt: {} as never,
+      type: 'savings' as const,
+      targetAmount: 1000,
+    };
+    await configure({ groups: [group1, goal] });
+
+    const fixture = TestBed.createComponent(Home);
+    const component = fixture.componentInstance;
+    fixture.detectChanges();
+    await flushMicrotasks();
+    fixture.detectChanges();
+
+    expect(component.groupIds()).toEqual(['group1', 'goal1']);
+    expect(component.sharedGroupIds()).toEqual(['group1']);
+  });
+
   it('renders the shared activity feed (via mfx-group-activity) with the group name tag once there is more than one group', async () => {
     await configure({
       groups: [group1, group2],
@@ -389,6 +430,23 @@ describe('Home "Gastos compartidos recientes" (wiring into GroupActivity)', () =
 
     expect(fixture.nativeElement.querySelector('mfx-group-activity')).toBeTruthy();
     expect(fixture.nativeElement.textContent).toContain('Apartamento');
+  });
+
+  // linkToGroupDetail: tocar una fila abre el detalle del grupo en vez de
+  // editar el gasto directo (ver GroupActivity.openMovementOrGroupDetail()).
+  // collapsedByDefault: las cuotas arrancan colapsadas acá — en el detalle
+  // del grupo (GroupDetail) se quedan expandidas, sin tocar ese default.
+  it('passes [linkToGroupDetail]="true" and [collapsedByDefault]="true" to mfx-group-activity', async () => {
+    await configure({ groups: [group1] });
+
+    const fixture = TestBed.createComponent(Home);
+    fixture.detectChanges();
+    await flushMicrotasks();
+    fixture.detectChanges();
+
+    const groupActivity = fixture.debugElement.query(By.directive(GroupActivity)).componentInstance as GroupActivity;
+    expect(groupActivity.linkToGroupDetail()).toBe(true);
+    expect(groupActivity.collapsedByDefault()).toBe(true);
   });
 });
 

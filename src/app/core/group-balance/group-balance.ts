@@ -83,3 +83,37 @@ export function calculateGroupBalance(movements: SharedMovement[], settlements: 
 
   return edges;
 }
+
+/**
+ * ¿Se puede editar/eliminar este gasto compartido? No, si ya existe un
+ * settlement del mismo grupo, con fecha igual o posterior a la del gasto,
+ * entre cualquier par de personas involucradas en él (paidBy o algún split)
+ * — o si ya se pagó al menos una cuota de su plan (ver más abajo).
+ *
+ * El modelo no guarda un vínculo directo entre un settlement "de saldar
+ * todo" y los movements que cubrió (ver calculateGroupBalance: el balance
+ * es puramente aditivo, sin ese rastro) — ese heurístico de fecha es el
+ * chequeo más fiel posible para ESE caso: un settlement anterior al gasto
+ * no pudo haber "asumido" su monto; uno posterior, sí.
+ *
+ * Pagar una cuota es distinto: sí se sabe con certeza a qué movimiento
+ * pertenece (payInstallment() marca installments[i].status='paid' en la
+ * MISMA transacción que crea el settlement — ver functions/src/index.ts),
+ * así que para cuotas no hace falta adivinar por fecha. Importante, porque
+ * el heurístico de fecha puede fallar en este caso puntual: si el gasto se
+ * crea con una fecha elegida a mano posterior al momento real en que se
+ * paga la primera cuota, "settlement.date >= movement.date" da falso
+ * aunque la cuota sí se haya pagado de verdad.
+ */
+export function isSharedMovementLocked(movement: SharedMovement, settlements: Settlement[]): boolean {
+  if (movement.installments?.some((installment) => installment.status === 'paid')) {
+    return true;
+  }
+
+  const involvedUids = new Set([movement.paidBy, ...movement.splits.map((split) => split.uid)]);
+  return settlements.some(
+    (settlement) =>
+      settlement.date.toMillis() >= movement.date.toMillis() &&
+      (involvedUids.has(settlement.fromUid) || involvedUids.has(settlement.toUid))
+  );
+}

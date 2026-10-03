@@ -6,6 +6,28 @@
   <p class="mfx-form__error" role="alert">{{ membersError() }}</p>
 } @else {
   <form class="mfx-form" [formGroup]="form" (ngSubmit)="submit()">
+    <mfx-attachment-picker
+      [existingPath]="existingAttachmentPath()"
+      [existingContentType]="initialValue()?.attachmentContentType ?? null"
+      [readOnly]="readOnly() || saving()"
+      [removing]="removingAttachment()"
+      [prepareAiPreview]="!initialValue()"
+      [inviteText]="'Adjunta la foto de un recibo y te completamos el gasto solos ✨'"
+      (attachmentReady)="onAttachmentReady($event)"
+      (existingRemoved)="onExistingAttachmentRemoved()"
+    />
+
+    @if (receiptReading()) {
+      <p class="mfx-shared-expense-form__receipt-status">
+        ✨ Leyendo el recibo…
+        <button type="button" class="mfx-shared-expense-form__receipt-cancel" (click)="cancelReceiptRead()">
+          Cancelar
+        </button>
+      </p>
+    } @else if (receiptNote()) {
+      <p class="mfx-shared-expense-form__receipt-note">{{ receiptNote() }}</p>
+    }
+
     @if (!isPersonalFlow()) {
       <div class="mfx-form__field">
         <span>¿Quién pagó?</span>
@@ -15,6 +37,7 @@
               type="button"
               class="mfx-shared-expense-form__person"
               [class.mfx-shared-expense-form__person--active]="paidByValue() === member.uid"
+              [disabled]="readOnly()"
               (click)="selectPaidBy(member.uid)"
             >
               <mfx-avatar [photoUrl]="member.photoURL" [displayName]="member.displayName" [size]="32" />
@@ -30,6 +53,9 @@
 
     <label class="mfx-form__field">
       Monto
+      @if (isAiFilled('amount')) {
+        <span class="mfx-shared-expense-form__ai-badge" title="Completado por IA, confirma antes de guardar">✨</span>
+      }
       <input mfxCurrencyInput formControlName="amount" />
       @if (form.controls.amount.invalid && form.controls.amount.touched) {
         <span class="mfx-form__error" role="alert">
@@ -46,28 +72,25 @@
       <label class="mfx-form__field">
         Cuenta
         <select formControlName="accountId">
-          <option value="" disabled>Selecciona una cuenta</option>
+          <option value="">Sin cuenta (solo queda como deuda compartida)</option>
           @for (account of accounts(); track account.id) {
             <option [value]="account.id">{{ account.name }}</option>
           }
         </select>
-        @if (form.controls.accountId.invalid && form.controls.accountId.touched) {
-          <span class="mfx-form__error" role="alert">Selecciona una cuenta.</span>
-        }
       </label>
     }
 
     <label class="mfx-form__field">
       Categoría
+      @if (isAiFilled('categoryId')) {
+        <span class="mfx-shared-expense-form__ai-badge" title="Completado por IA, confirma antes de guardar">✨</span>
+      }
       <select formControlName="categoryId">
-        <option value="" disabled>Selecciona una categoría</option>
+        <option value="">Sin categoría</option>
         @for (category of expenseCategories(); track category.id) {
           <option [value]="category.id">{{ category.icon }} {{ category.name }}</option>
         }
       </select>
-      @if (form.controls.categoryId.invalid && form.controls.categoryId.touched) {
-        <span class="mfx-form__error" role="alert">Selecciona una categoría.</span>
-      }
     </label>
 
     @if (!isPersonalFlow()) {
@@ -79,6 +102,7 @@
               type="button"
               class="mfx-shared-expense-form__split-type"
               [class.mfx-shared-expense-form__split-type--active]="splitTypeValue() === option.value"
+              [disabled]="readOnly()"
               (click)="selectSplitType(option.value)"
             >
               {{ option.label }}
@@ -122,8 +146,70 @@
       }
     }
 
+    @if (showInstallmentOption()) {
+      <mfx-checkbox formControlName="payInInstallments">¿Pagar a cuotas?</mfx-checkbox>
+
+      @if (payInInstallmentsValue()) {
+        <label class="mfx-form__field">
+          Número de cuotas
+          <input type="number" formControlName="installmentCount" min="2" max="36" step="1" />
+          @if (form.controls.installmentCount.invalid && form.controls.installmentCount.touched) {
+            <span class="mfx-form__error" role="alert">
+              @if (form.controls.installmentCount.hasError('min')) {
+                Mínimo 2 cuotas.
+              } @else if (form.controls.installmentCount.hasError('max')) {
+                Máximo 36 cuotas.
+              }
+            </span>
+          }
+        </label>
+
+        <div class="mfx-form__field">
+          <span>¿Cómo se divide la deuda ({{ debtorAmount() | mfxCurrency }})?</span>
+          <div class="mfx-shared-expense-form__split-types">
+            @for (option of installmentModes; track option.value) {
+              <button
+                type="button"
+                class="mfx-shared-expense-form__split-type"
+                [class.mfx-shared-expense-form__split-type--active]="installmentMode() === option.value"
+                (click)="selectInstallmentMode(option.value)"
+              >
+                {{ option.label }}
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="mfx-shared-expense-form__breakdown">
+          @if (installmentMode() === 'equal') {
+            @for (installment of installmentPreview(); track $index; let i = $index) {
+              <div class="mfx-shared-expense-form__breakdown-row">
+                <span>Cuota {{ i + 1 }} — {{ formatInstallmentDate(installment.dueDate) }}</span>
+                <span>{{ installment.amount | mfxCurrency }}</span>
+              </div>
+            }
+          } @else {
+            @for (control of installmentInputs.controls; track $index; let i = $index) {
+              <div class="mfx-shared-expense-form__breakdown-row">
+                <span>Cuota {{ i + 1 }} — {{ formatInstallmentDate(installmentPreview()[i].dueDate) }}</span>
+                <input mfxCurrencyInput [formControl]="control" />
+              </div>
+            }
+          }
+        </div>
+        @if (installmentMismatch()) {
+          <span class="mfx-form__error" role="alert">
+            Las cuotas deben sumar {{ debtorAmount() | mfxCurrency }} (llevas {{ installmentSum() | mfxCurrency }}).
+          </span>
+        }
+      }
+    }
+
     <label class="mfx-form__field">
       Fecha
+      @if (isAiFilled('date')) {
+        <span class="mfx-shared-expense-form__ai-badge" title="Completado por IA, confirma antes de guardar">✨</span>
+      }
       <input type="date" formControlName="date" />
       @if (form.controls.date.invalid && form.controls.date.touched) {
         <span class="mfx-form__error" role="alert">La fecha es obligatoria.</span>
@@ -132,6 +218,9 @@
 
     <label class="mfx-form__field">
       Nota
+      @if (isAiFilled('note')) {
+        <span class="mfx-shared-expense-form__ai-badge" title="Completado por IA, confirma antes de guardar">✨</span>
+      }
       <textarea formControlName="note" placeholder="Opcional"></textarea>
     </label>
 
@@ -139,10 +228,68 @@
       <p class="mfx-form__error" role="alert">{{ errorMessage() }}</p>
     }
 
-    <div class="mfx-form__actions">
-      <button type="submit" class="mfx-btn-primary" [disabled]="saving() || form.invalid || splitMismatch()">
-        {{ saving() ? 'Guardando…' : isPersonalFlow() ? 'Agregar gasto' : 'Agregar gasto compartido' }}
-      </button>
-    </div>
+    @if (isLocked()) {
+      <p class="mfx-form__error" role="alert">
+        No se puede modificar, ya hay un saldo relacionado marcado como pagado.
+      </p>
+    }
+
+    @if (readOnlyInstallments(); as installments) {
+      <div class="mfx-section-header">
+        <h4>Cuotas</h4>
+      </div>
+      @for (installment of installments; track $index; let i = $index) {
+        <mfx-installment-row [installment]="installment" [index]="i" [interactive]="false" />
+      }
+    }
+
+    @if (!readOnly()) {
+      <div class="mfx-form__actions">
+        <button
+          type="submit"
+          class="mfx-btn-primary"
+          [disabled]="saving() || form.invalid || splitMismatch() || installmentMismatch()"
+        >
+          {{
+            saving()
+              ? 'Guardando…'
+              : attachmentRetryPending()
+                ? 'Reintentar subir adjunto'
+                : initialValue()
+                  ? 'Guardar cambios'
+                  : isPersonalFlow()
+                    ? 'Agregar gasto'
+                    : 'Agregar gasto compartido'
+          }}
+        </button>
+      </div>
+    }
   </form>
+
+  @if (showDangerZone()) {
+    <div class="mfx-section-header">
+      <h4>Zona de peligro</h4>
+    </div>
+
+    @if (!confirmingDelete()) {
+      <button type="button" class="mfx-btn-danger" (click)="confirmingDelete.set(true)">Eliminar gasto</button>
+    } @else {
+      <div class="mfx-shared-expense-form__confirm">
+        <p>¿Seguro que quieres eliminar este gasto? Esta acción no se puede deshacer.</p>
+        <div class="mfx-form__actions">
+          <button
+            type="button"
+            class="mfx-shared-expense-form__cancel-delete"
+            [disabled]="deleting()"
+            (click)="confirmingDelete.set(false)"
+          >
+            Cancelar
+          </button>
+          <button type="button" class="mfx-btn-danger" [disabled]="deleting()" (click)="remove()">
+            {{ deleting() ? 'Eliminando…' : 'Sí, eliminar' }}
+          </button>
+        </div>
+      </div>
+    }
+  }
 }

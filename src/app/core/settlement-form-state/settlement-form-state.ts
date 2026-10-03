@@ -7,6 +7,11 @@ export interface SettlementContext {
   amount: number;
   fromName: string;
   toName: string;
+  // Presente solo cuando se abre desde "marcar esta cuota como pagada" (ver
+  // GroupActivity) — ver DATABASE.md, "Pagos a cuotas". SettlementForm usa
+  // esto para bloquear el monto y, al guardar, llamar a
+  // MovementsService.payInstallment() en vez de SettlementsService.create().
+  installmentRef?: { movementId: string; installmentIndex: number; totalInstallments: number } | null;
 }
 
 /**

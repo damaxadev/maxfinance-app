@@ -25,7 +25,7 @@
     </mfx-card>
   } @else {
     @for (movement of recentMovements(); track movement.id; let i = $index) {
-      <mfx-card [index]="i + 1">
+      <mfx-card [index]="i + 1" (click)="openRecentMovement(movement)">
         <div class="mfx-home__movement">
           <div class="mfx-home__movement-info">
             <span class="mfx-home__icon-badge">{{ movement.categoryIcon }}</span>
@@ -58,7 +58,13 @@
   </div>
 
   <mfx-card [index]="4">
-    <mfx-group-activity [groupIds]="sharedGroupIds()" [members]="allMemberProfiles()" [limit]="5" />
+    <mfx-group-activity
+      [groupIds]="sharedGroupIds()"
+      [members]="allMemberProfiles()"
+      [limit]="5"
+      [linkToGroupDetail]="true"
+      [collapsedByDefault]="true"
+    />
   </mfx-card>
 
   <div class="mfx-home__section-header-row">

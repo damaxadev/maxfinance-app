@@ -1,0 +1,62 @@
+<form class="mfx-form" [formGroup]="form" (ngSubmit)="submit()">
+  <mfx-attachment-picker
+    [readOnly]="saving()"
+    [inviteText]="'Adjunta un comprobante y te completamos el aporte solos ✨'"
+    (attachmentReady)="pendingAttachment.set($event)"
+  />
+
+  <div class="mfx-goal-entry-form__types">
+    @for (option of entryTypes; track option.value) {
+      <button
+        type="button"
+        class="mfx-goal-entry-form__type"
+        [class.mfx-goal-entry-form__type--active]="typeValue() === option.value"
+        (click)="selectType(option.value)"
+      >
+        {{ option.label }}
+      </button>
+    }
+  </div>
+
+  <label class="mfx-form__field">
+    Monto
+    <input mfxCurrencyInput formControlName="amount" />
+    @if (form.controls.amount.invalid && form.controls.amount.touched) {
+      <span class="mfx-form__error" role="alert">
+        @if (form.controls.amount.hasError('required')) {
+          El monto es obligatorio.
+        } @else if (form.controls.amount.hasError('min')) {
+          El monto debe ser mayor a 0.
+        }
+      </span>
+    }
+  </label>
+
+  <label class="mfx-form__field">
+    Fecha
+    <input type="date" formControlName="date" />
+  </label>
+
+  <label class="mfx-form__field">
+    Nota
+    <textarea formControlName="note" placeholder="Opcional"></textarea>
+  </label>
+
+  @if (errorMessage()) {
+    <p class="mfx-form__error" role="alert">{{ errorMessage() }}</p>
+  }
+
+  <div class="mfx-form__actions">
+    <button type="submit" class="mfx-btn-primary" [disabled]="saving() || form.invalid">
+      {{
+        saving()
+          ? 'Guardando…'
+          : attachmentRetryPending()
+            ? 'Reintentar subir adjunto'
+            : typeValue() === 'withdrawal'
+              ? 'Registrar retiro'
+              : 'Registrar aporte'
+      }}
+    </button>
+  </div>
+</form>
