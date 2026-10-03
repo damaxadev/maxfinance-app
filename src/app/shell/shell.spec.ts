@@ -9,8 +9,10 @@ import { Shell } from './shell';
 import { ActiveTabState } from '../core/active-tab-state/active-tab-state';
 import { Auth } from '../core/auth/auth';
 import { Accounts } from '../core/accounts/accounts';
+import { AttachmentsService } from '../core/attachments/attachments';
 import { Budgets } from '../core/budgets/budgets';
 import { Categories } from '../core/categories/categories';
+import { GoalEntriesService } from '../core/goal-entries/goal-entries';
 import { MonthlyInsights } from '../core/monthly-insights/monthly-insights';
 import { MovementsService } from '../core/movements/movements';
 import { Notifications } from '../core/notifications/notifications';
@@ -128,6 +130,17 @@ describe('Shell', () => {
             getKnownContacts: vi.fn().mockResolvedValue([]),
           },
         },
+        // Groups (swiper-slide de Grupos) inyecta esto directo para el
+        // progreso de cada meta — se mockea acá por el mismo motivo que
+        // GroupsService arriba (la real necesita Firestore + Auth, que
+        // este TestBed no provee para ella).
+        { provide: GoalEntriesService, useValue: { entries$: () => of([]) } },
+        // mfx-attachment-picker (dentro de MovementForm/SharedExpenseForm) y
+        // GroupDetail (para abrir el adjunto de una entrada del ledger de
+        // una meta) inyectan esto directo — se mockea por el mismo motivo
+        // que GoalEntriesService arriba: la real necesitaría Storage, que
+        // este TestBed no provee.
+        { provide: AttachmentsService, useValue: { getDownloadUrl: vi.fn().mockResolvedValue(null) } },
         // GroupDetail inyecta Auth directamente (para saber "quién soy" y
         // decidir qué botón mostrar por fila) — se mockea acá en vez de
         // dejar que se construya la real, que a su vez necesitaría Firestore.

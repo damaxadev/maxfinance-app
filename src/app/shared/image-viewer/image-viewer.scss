@@ -1,0 +1,60 @@
+:host {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: block;
+}
+
+.mfx-image-viewer__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 11, 20, 0.92);
+}
+
+// pointer-events:none acá, re-habilitado solo en __swiper — es lo que
+// convierte el margen alrededor de la imagen en backdrop de verdad
+// (clicable) en vez de una capa invisible que lo tapa por completo.
+.mfx-image-viewer__frame {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0)
+    env(safe-area-inset-left, 0);
+  pointer-events: none;
+}
+
+// Tamaño fijo (no 100%/100% del marco) a propósito — Swiper necesita una
+// caja con medida explícita para calcular sus gestos, y dejar márgenes
+// visibles es justo lo que hace tocable el backdrop alrededor, sin
+// importar la proporción de la imagen.
+.mfx-image-viewer__swiper {
+  pointer-events: auto;
+  width: 92vw;
+  height: 80dvh;
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+}
+
+.mfx-image-viewer__close {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0) + 1rem);
+  right: calc(env(safe-area-inset-right, 0) + 1rem);
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}

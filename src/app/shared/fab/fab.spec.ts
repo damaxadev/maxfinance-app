@@ -113,7 +113,18 @@ describe('Fab', () => {
     expect(emitted.length).toBe(1);
   });
 
-  it('renders all four options while open', () => {
+  it('selecting "Agregar meta" emits goalRequested', () => {
+    component.toggle();
+    const emitted: void[] = [];
+    component.goalRequested.subscribe(() => emitted.push(undefined));
+
+    component.selectOption(component.options[4]);
+
+    expect(component.open()).toBe(false);
+    expect(emitted.length).toBe(1);
+  });
+
+  it('renders all five options while open', () => {
     component.toggle();
     fixture.detectChanges();
 
@@ -121,7 +132,13 @@ describe('Fab', () => {
       fixture.nativeElement.querySelectorAll('.mfx-fab__option')
     ).map((el) => el.textContent?.trim());
 
-    expect(labels).toEqual(['Agregar movimiento', 'Nuevo grupo', 'Agregar gasto compartido', 'Nuevo recurrente']);
+    expect(labels).toEqual([
+      'Agregar movimiento',
+      'Nuevo grupo',
+      'Agregar gasto compartido',
+      'Nuevo recurrente',
+      'Agregar meta',
+    ]);
   });
 
   it('closes when the backdrop is clicked', () => {

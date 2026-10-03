@@ -1,0 +1,19 @@
+<div class="mfx-image-viewer__backdrop" [@fadeInOut] (click)="close()"></div>
+
+<!-- pointer-events:none acá (ver scss) — dentro de este marco, SOLO el
+     "escenario" de abajo (del tamaño de la imagen, no de la pantalla
+     entera) vuelve a aceptar toques. El margen alrededor deja pasar el tap
+     hasta el backdrop de arriba, así que tocar fuera de la imagen cierra,
+     y pellizcar/doble-tap DENTRO de la imagen nunca le llega al backdrop —
+     sin necesidad de interpretar los gestos de Swiper, es geometría pura. -->
+<div class="mfx-image-viewer__frame" [@fadeInOut]>
+  <swiper-container class="mfx-image-viewer__swiper" [zoom]="true" [modules]="zoomModules" [centeredSlides]="true">
+    <swiper-slide>
+      <div class="swiper-zoom-container">
+        <img [src]="imageUrl()" [alt]="altText()" />
+      </div>
+    </swiper-slide>
+  </swiper-container>
+</div>
+
+<button type="button" class="mfx-image-viewer__close" aria-label="Cerrar" (click)="close()">✕</button>

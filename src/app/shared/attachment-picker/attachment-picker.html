@@ -1,0 +1,123 @@
+@if (readOnly()) {
+  @if (existingUrl(); as url) {
+    <button type="button" class="mfx-attachment-picker__view-link" (click)="openAttachment()">
+      {{ isPdf() ? '📄 Ver adjunto (PDF)' : '🖼️ Ver adjunto' }}
+    </button>
+  }
+} @else {
+  @if (compressing()) {
+    <div class="mfx-attachment-picker__zone mfx-attachment-picker__zone--busy">
+      <p>Comprimiendo archivo…</p>
+    </div>
+  } @else if (removing()) {
+    <div class="mfx-attachment-picker__zone mfx-attachment-picker__zone--busy">
+      <p>Eliminando adjunto…</p>
+    </div>
+  } @else if (pendingAttachment(); as pending) {
+    <div class="mfx-attachment-picker__zone mfx-attachment-picker__zone--filled" (click)="openAttachment()">
+      @if (pendingPreviewUrl(); as previewUrl) {
+        <img class="mfx-attachment-picker__thumb" [src]="previewUrl" alt="" />
+      } @else {
+        <span class="mfx-attachment-picker__pdf-icon">📄</span>
+      }
+      <span class="mfx-attachment-picker__filename">{{ fileName() }}</span>
+      <button
+        type="button"
+        class="mfx-attachment-picker__options-trigger"
+        aria-label="Opciones del adjunto"
+        (click)="openOptionsMenu($event)"
+      >
+        ⋮
+      </button>
+    </div>
+  } @else if (existingPath()) {
+    <div class="mfx-attachment-picker__zone mfx-attachment-picker__zone--filled" (click)="openAttachment()">
+      @if (isPdf()) {
+        <span class="mfx-attachment-picker__pdf-icon">📄</span>
+      } @else if (existingUrl(); as url) {
+        <img class="mfx-attachment-picker__thumb" [src]="url" alt="" />
+      }
+      <span class="mfx-attachment-picker__filename">Adjunto guardado</span>
+      <span class="mfx-attachment-picker__replace-hint">Toca para verlo</span>
+      <button
+        type="button"
+        class="mfx-attachment-picker__options-trigger"
+        aria-label="Opciones del adjunto"
+        (click)="openOptionsMenu($event)"
+      >
+        ⋮
+      </button>
+    </div>
+  } @else {
+    <div class="mfx-attachment-picker__zone mfx-attachment-picker__zone--empty" (click)="openMenu()">
+      <span class="mfx-attachment-picker__icon">📎</span>
+      <p class="mfx-attachment-picker__invite-text">{{ inviteText() }}</p>
+    </div>
+  }
+
+  @if (errorMessage()) {
+    <p class="mfx-form__error" role="alert">{{ errorMessage() }}</p>
+  }
+
+  @if (menuOpen()) {
+    <mfx-modal title="Adjuntar archivo" (closed)="closeMenu()">
+      <div class="mfx-attachment-picker__menu">
+        <button type="button" class="mfx-attachment-picker__menu-option" (click)="takePhoto()">
+          <span class="mfx-attachment-picker__menu-icon">📷</span>
+          Tomar foto
+        </button>
+        <button type="button" class="mfx-attachment-picker__menu-option" (click)="pickFromGallery()">
+          <span class="mfx-attachment-picker__menu-icon">🖼️</span>
+          Elegir foto de galería
+        </button>
+        <button type="button" class="mfx-attachment-picker__menu-option" (click)="pickPdf()">
+          <span class="mfx-attachment-picker__menu-icon">📄</span>
+          Elegir PDF
+        </button>
+      </div>
+    </mfx-modal>
+  }
+
+  @if (optionsMenuOpen()) {
+    <mfx-modal
+      [title]="confirmingRemove() ? '¿Eliminar adjunto?' : 'Opciones del adjunto'"
+      (closed)="closeOptionsMenu()"
+    >
+      @if (confirmingRemove()) {
+        <p>Esta acción no se puede deshacer.</p>
+        <div class="mfx-form__actions">
+          <button type="button" class="mfx-attachment-picker__cancel" (click)="cancelRemoveExisting()">
+            Cancelar
+          </button>
+          <button type="button" class="mfx-btn-danger" (click)="confirmRemoveExisting()">Sí, eliminar</button>
+        </div>
+      } @else {
+        <div class="mfx-attachment-picker__menu">
+          <button type="button" class="mfx-attachment-picker__menu-option" (click)="replaceFromOptionsMenu()">
+            <span class="mfx-attachment-picker__menu-icon">🔄</span>
+            Reemplazar
+          </button>
+          @if (pendingAttachment()) {
+            <button type="button" class="mfx-attachment-picker__menu-option" (click)="quitPending()">
+              <span class="mfx-attachment-picker__menu-icon">✕</span>
+              Quitar
+            </button>
+          } @else {
+            <button
+              type="button"
+              class="mfx-attachment-picker__menu-option mfx-attachment-picker__menu-option--danger"
+              (click)="askRemoveExisting()"
+            >
+              <span class="mfx-attachment-picker__menu-icon">🗑️</span>
+              Eliminar
+            </button>
+          }
+        </div>
+      }
+    </mfx-modal>
+  }
+}
+
+@if (viewerUrl(); as url) {
+  <mfx-image-viewer [imageUrl]="url" (closed)="closeViewer()" />
+}

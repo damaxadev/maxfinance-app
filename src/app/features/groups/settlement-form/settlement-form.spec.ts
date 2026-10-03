@@ -5,6 +5,7 @@ import { vi } from 'vitest';
 import { Accounts } from '../../../core/accounts/accounts';
 import { Auth } from '../../../core/auth/auth';
 import { Celebration } from '../../../core/celebration/celebration';
+import { MovementsService } from '../../../core/movements/movements';
 import type { SettlementContext } from '../../../core/settlement-form-state/settlement-form-state';
 import { SettlementsService } from '../../../core/settlements/settlements';
 import { SettlementForm } from './settlement-form';
@@ -23,16 +24,19 @@ describe('SettlementForm (viewed by the payer, u1)', () => {
   let component: SettlementForm;
   let fixture: ComponentFixture<SettlementForm>;
   let create: ReturnType<typeof vi.fn>;
+  let payInstallment: ReturnType<typeof vi.fn>;
   let celebrate: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     create = vi.fn().mockResolvedValue(undefined);
+    payInstallment = vi.fn().mockResolvedValue(undefined);
     celebrate = vi.fn().mockResolvedValue(undefined);
 
     await TestBed.configureTestingModule({
       imports: [SettlementForm],
       providers: [
         { provide: SettlementsService, useValue: { create } },
+        { provide: MovementsService, useValue: { payInstallment } },
         { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
         { provide: Auth, useValue: { currentUser: { uid: 'u1' } } },
         { provide: Celebration, useValue: { celebrate } },
@@ -154,6 +158,7 @@ describe('SettlementForm (viewed by the receiver, u2)', () => {
       imports: [SettlementForm],
       providers: [
         { provide: SettlementsService, useValue: { create: vi.fn().mockResolvedValue(undefined) } },
+        { provide: MovementsService, useValue: { payInstallment: vi.fn().mockResolvedValue(undefined) } },
         { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
         { provide: Auth, useValue: { currentUser: { uid: 'u2' } } },
         { provide: Celebration, useValue: { celebrate: vi.fn().mockResolvedValue(undefined) } },
@@ -168,5 +173,97 @@ describe('SettlementForm (viewed by the receiver, u2)', () => {
 
   it('is not the payer', () => {
     expect(component.isPayer()).toBe(false);
+  });
+});
+
+// Ver DATABASE.md, "Pagos a cuotas": abierto desde GroupActivity con
+// installmentRef presente — mismo modal, pero el monto queda bloqueado y
+// submit() llama a MovementsService.payInstallment() en vez de
+// SettlementsService.create().
+describe('SettlementForm paying a specific installment', () => {
+  let component: SettlementForm;
+  let fixture: ComponentFixture<SettlementForm>;
+  let create: ReturnType<typeof vi.fn>;
+  let payInstallment: ReturnType<typeof vi.fn>;
+  let celebrate: ReturnType<typeof vi.fn>;
+
+  const installmentContext: SettlementContext = {
+    groupId: 'group1',
+    fromUid: 'u1',
+    toUid: 'u2',
+    amount: 25,
+    fromName: 'Diego',
+    toName: 'Ana',
+    installmentRef: { movementId: 'mov1', installmentIndex: 2, totalInstallments: 6 },
+  };
+
+  beforeEach(async () => {
+    create = vi.fn().mockResolvedValue(undefined);
+    payInstallment = vi.fn().mockResolvedValue(undefined);
+    celebrate = vi.fn().mockResolvedValue(undefined);
+
+    await TestBed.configureTestingModule({
+      imports: [SettlementForm],
+      providers: [
+        { provide: SettlementsService, useValue: { create } },
+        { provide: MovementsService, useValue: { payInstallment } },
+        { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
+        { provide: Auth, useValue: { currentUser: { uid: 'u1' } } },
+        { provide: Celebration, useValue: { celebrate } },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(SettlementForm);
+    fixture.componentRef.setInput('context', installmentContext);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  it('isInstallmentPayment() is true', () => {
+    expect(component.isInstallmentPayment()).toBe(true);
+  });
+
+  it('prefills the amount and disables it', () => {
+    expect(component.form.controls.amount.value).toBe(25);
+    expect(component.form.controls.amount.disabled).toBe(true);
+  });
+
+  it('shows the installment number in the intro text', () => {
+    expect(fixture.nativeElement.textContent).toContain('Cuota 3 de 6');
+  });
+
+  it('hides the "registrar también como movimiento personal" checkbox', () => {
+    expect(fixture.nativeElement.querySelector('mfx-checkbox')).toBeNull();
+  });
+
+  it('submit() calls payInstallment with the movement id, index, and note — not create()', async () => {
+    component.form.controls.note.setValue('Cuota 3 de 6');
+    const emitted: void[] = [];
+    component.saved.subscribe(() => emitted.push(undefined));
+
+    await component.submit();
+
+    expect(payInstallment).toHaveBeenCalledWith('mov1', 2, 'Cuota 3 de 6');
+    expect(create).not.toHaveBeenCalled();
+    expect(celebrate).toHaveBeenCalled();
+    expect(emitted.length).toBe(1);
+  });
+
+  it('shows an inline error and does not emit saved if payInstallment() fails', async () => {
+    payInstallment.mockRejectedValue(new Error('boom'));
+    const emitted: void[] = [];
+    component.saved.subscribe(() => emitted.push(undefined));
+
+    await component.submit();
+
+    expect(component.errorMessage()).toBe('No pudimos registrar el pago. Intenta de nuevo.');
+    expect(emitted.length).toBe(0);
+  });
+
+  it('submits even though the amount control is disabled (getRawValue includes it)', async () => {
+    await component.submit();
+
+    expect(payInstallment).toHaveBeenCalled();
+    expect(component.form.invalid).toBe(false);
   });
 });

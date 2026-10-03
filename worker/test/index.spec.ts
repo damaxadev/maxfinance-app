@@ -57,6 +57,24 @@ function usageRequest(idToken: string, headers: Record<string, string> = {}): Re
   });
 }
 
+function receiptRequest(body: unknown, idToken = 'fake-token', headers: Record<string, string> = {}): Request {
+  return new IncomingRequest('https://example.com/receipt', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', Authorization: `Bearer ${idToken}`, ...headers },
+    body: JSON.stringify(body),
+  });
+}
+
+const validReceiptJson = JSON.stringify({
+  amount: 45000,
+  currency: 'COP',
+  date: '2026-09-30',
+  merchant: 'Supermercado La 14',
+  suggestedCategory: 'Supermercado',
+  lineItems: [{ description: 'Arroz', amount: 5000 }],
+  confidence: 'high',
+});
+
 describe('maxfinance-worker', () => {
   beforeEach(() => {
     // Por defecto un token "Bearer" cualquiera falla la verificación (como
@@ -405,5 +423,231 @@ describe('GET /summary/usage', () => {
     await waitOnExecutionContext(ctx);
 
     expect(await response.json()).toEqual({ count: 5, nextAvailableAt: null });
+  });
+});
+
+describe('POST /receipt', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('responds 401 without credentials', async () => {
+    const request = new IncomingRequest('https://example.com/receipt', { method: 'POST' });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(response.status).toBe(401);
+  });
+
+  it('responds 401 for X-Internal-Key (this endpoint is for the signed-in user, not server-to-server)', async () => {
+    const request = new IncomingRequest('https://example.com/receipt', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-Internal-Key': env.INTERNAL_KEY },
+      body: JSON.stringify({ mediaType: 'image/jpeg', data: 'x' }),
+    });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(response.status).toBe(401);
+  });
+
+  it('responds 400 for a mediaType outside the allowlist', async () => {
+    mockFirebaseToken('user-receipt-bad-type');
+    const request = receiptRequest({ mediaType: 'video/mp4', data: 'x' });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'invalid_body' });
+  });
+
+  it('responds 400 when data is missing/empty', async () => {
+    mockFirebaseToken('user-receipt-no-data');
+    const request = receiptRequest({ mediaType: 'image/jpeg', data: '' });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(response.status).toBe(400);
+  });
+
+  it('responds 400 when an image exceeds its 5MB base64 cap', async () => {
+    mockFirebaseToken('user-receipt-image-too-big');
+    const huge = 'a'.repeat(5 * 1024 * 1024 + 1);
+    const request = receiptRequest({ mediaType: 'image/jpeg', data: huge });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(response.status).toBe(400);
+  });
+
+  it('accepts an image right at the 5MB base64 cap (boundary, not off-by-one)', async () => {
+    mockFirebaseToken('user-receipt-image-at-cap');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(anthropicResponse(validReceiptJson));
+    const atCap = 'a'.repeat(5 * 1024 * 1024);
+    const request = receiptRequest({ mediaType: 'image/jpeg', data: atCap });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(response.status).toBe(200);
+  });
+
+  it('rejects a PDF over its own, much larger 30MB base64 cap', async () => {
+    mockFirebaseToken('user-receipt-pdf-too-big');
+    const huge = 'a'.repeat(30 * 1024 * 1024 + 1);
+    const request = receiptRequest({ mediaType: 'application/pdf', data: huge });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(response.status).toBe(400);
+  });
+
+  it('accepts a PDF well past the image cap but still under its own cap (the two caps are independent)', async () => {
+    mockFirebaseToken('user-receipt-pdf-above-image-cap');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(anthropicResponse(validReceiptJson));
+    const tenMegabytes = 'a'.repeat(10 * 1024 * 1024); // por encima del tope de imagen (5MB), bajo el de PDF (30MB)
+    const request = receiptRequest({ mediaType: 'application/pdf', data: tenMegabytes });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(response.status).toBe(200);
+  });
+
+  it('sends an image content block to Anthropic with the receipt model/prompt, and returns the parsed extraction', async () => {
+    mockFirebaseToken('user-receipt-happy');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(anthropicResponse(validReceiptJson));
+
+    const request = receiptRequest({ mediaType: 'image/jpeg', data: 'BASE64DATA' });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(JSON.parse(validReceiptJson));
+
+    const [, requestInit] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const anthropicBody = JSON.parse(requestInit.body as string) as {
+      model: string;
+      max_tokens: number;
+      messages: { content: { type: string; source?: { media_type: string; data: string } }[] }[];
+    };
+    expect(anthropicBody.model).toBe('claude-haiku-4-5-20251001');
+    expect(anthropicBody.max_tokens).toBe(1024);
+    const [imageBlock] = anthropicBody.messages[0].content;
+    expect(imageBlock.type).toBe('image');
+    expect(imageBlock.source).toEqual({ type: 'base64', media_type: 'image/jpeg', data: 'BASE64DATA' });
+  });
+
+  it('sends a document content block (not image) for a PDF', async () => {
+    mockFirebaseToken('user-receipt-pdf');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(anthropicResponse(validReceiptJson));
+
+    const request = receiptRequest({ mediaType: 'application/pdf', data: 'PDFBASE64' });
+    const ctx = createExecutionContext();
+    await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+
+    const [, requestInit] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const anthropicBody = JSON.parse(requestInit.body as string) as {
+      messages: { content: { type: string; source?: { media_type: string } }[] }[];
+    };
+    const [documentBlock] = anthropicBody.messages[0].content;
+    expect(documentBlock.type).toBe('document');
+    expect(documentBlock.source?.media_type).toBe('application/pdf');
+  });
+
+  it('strips ```json fences before parsing', async () => {
+    mockFirebaseToken('user-receipt-fenced');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(anthropicResponse('```json\n' + validReceiptJson + '\n```'));
+
+    const request = receiptRequest({ mediaType: 'image/jpeg', data: 'x' });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(JSON.parse(validReceiptJson));
+  });
+
+  it('falls back to an all-null, low-confidence result (status 200) when Anthropic returns unparseable text', async () => {
+    mockFirebaseToken('user-receipt-garbage');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(anthropicResponse('no sé qué pasó, no es JSON'));
+
+    const request = receiptRequest({ mediaType: 'image/jpeg', data: 'x' });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      amount: null,
+      currency: null,
+      date: null,
+      merchant: null,
+      suggestedCategory: null,
+      lineItems: null,
+      confidence: 'low',
+    });
+  });
+
+  it('responds 502 when the Anthropic call fails outright', async () => {
+    mockFirebaseToken('user-receipt-error');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('boom', { status: 500 }));
+
+    const request = receiptRequest({ mediaType: 'image/jpeg', data: 'x' });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: 'ai_unavailable' });
+  });
+
+  it('increments receipt-count:<uid>:<date> only on a call that actually reached Anthropic', async () => {
+    mockFirebaseToken('user-receipt-counter');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(anthropicResponse(validReceiptJson));
+    const todayKey = `receipt-count:user-receipt-counter:${new Date().toISOString().slice(0, 10)}`;
+
+    await worker.fetch(receiptRequest({ mediaType: 'image/jpeg', data: 'x' }), env, createExecutionContext());
+    expect(await env.AI_SUMMARY_CACHE.get(todayKey)).toBe('1');
+
+    // Un 400 (ni siquiera intenta llamar a Anthropic) no debe sumar.
+    await worker.fetch(receiptRequest({ mediaType: 'video/mp4', data: 'x' }), env, createExecutionContext());
+    expect(await env.AI_SUMMARY_CACHE.get(todayKey)).toBe('1');
+
+    // Un 502 (sí intentó, pero Anthropic falló) tampoco debe sumar —
+    // reintentar tras un fallo transitorio no debe castigar doble.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('boom', { status: 500 }));
+    await worker.fetch(receiptRequest({ mediaType: 'image/jpeg', data: 'x' }), env, createExecutionContext());
+    expect(await env.AI_SUMMARY_CACHE.get(todayKey)).toBe('1');
+  });
+
+  it('responds 429 once the daily cap is reached, without calling Anthropic', async () => {
+    mockFirebaseToken('user-receipt-capped');
+    const todayKey = `receipt-count:user-receipt-capped:${new Date().toISOString().slice(0, 10)}`;
+    await env.AI_SUMMARY_CACHE.put(todayKey, '50');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    const request = receiptRequest({ mediaType: 'image/jpeg', data: 'x' });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({ error: 'rate_limited' });
+  });
+
+  it('includes the CORS header on a successful /receipt response for an allowed origin', async () => {
+    mockFirebaseToken('user-receipt-cors');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(anthropicResponse(validReceiptJson));
+
+    const request = receiptRequest({ mediaType: 'image/jpeg', data: 'x' }, 'fake-token', {
+      Origin: 'https://localhost',
+    });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://localhost');
   });
 });

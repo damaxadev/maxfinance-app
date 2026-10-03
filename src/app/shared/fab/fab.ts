@@ -12,6 +12,7 @@ const FAB_OPTIONS: readonly FabOption[] = [
   { id: 'group', label: 'Nuevo grupo' },
   { id: 'shared-expense', label: 'Agregar gasto compartido' },
   { id: 'recurring', label: 'Nuevo recurrente' },
+  { id: 'goal', label: 'Agregar meta' },
 ];
 
 const STAGGER_STEP_MS = 50;
@@ -47,6 +48,7 @@ export class Fab {
   readonly groupRequested = output<void>();
   readonly sharedExpenseRequested = output<void>();
   readonly recurringRequested = output<void>();
+  readonly goalRequested = output<void>();
 
   staggerDelay(index: number): number {
     return index * STAGGER_STEP_MS;
@@ -91,7 +93,12 @@ export class Fab {
       return;
     }
 
-    this.recurringRequested.emit();
+    if (option.id === 'recurring') {
+      this.recurringRequested.emit();
+      return;
+    }
+
+    this.goalRequested.emit();
   }
 
   private async buzz(style: ImpactStyle): Promise<void> {

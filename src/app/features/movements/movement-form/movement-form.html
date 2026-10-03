@@ -4,6 +4,28 @@
   </p>
 } @else {
   <form class="mfx-form" [formGroup]="form" (ngSubmit)="submit()">
+    <mfx-attachment-picker
+      [existingPath]="existingAttachmentPath()"
+      [existingContentType]="initialValue()?.attachmentContentType ?? null"
+      [readOnly]="saving()"
+      [removing]="removingAttachment()"
+      [prepareAiPreview]="!initialValue()"
+      [inviteText]="'Adjunta la foto de un recibo y te completamos el movimiento solos ✨'"
+      (attachmentReady)="onAttachmentReady($event)"
+      (existingRemoved)="onExistingAttachmentRemoved()"
+    />
+
+    @if (receiptReading()) {
+      <p class="mfx-movement-form__receipt-status">
+        ✨ Leyendo el recibo…
+        <button type="button" class="mfx-movement-form__receipt-cancel" (click)="cancelReceiptRead()">
+          Cancelar
+        </button>
+      </p>
+    } @else if (receiptNote()) {
+      <p class="mfx-movement-form__receipt-note">{{ receiptNote() }}</p>
+    }
+
     <div class="mfx-segmented" role="radiogroup" aria-label="Tipo de movimiento">
       <div class="mfx-segmented__thumb" [class.mfx-segmented__thumb--income]="typeValue() === 'income'"></div>
       @for (option of movementTypes; track option.value) {
@@ -22,6 +44,9 @@
 
     <label class="mfx-form__field">
       Monto
+      @if (isAiFilled('amount')) {
+        <span class="mfx-movement-form__ai-badge" title="Completado por IA, confirma antes de guardar">✨</span>
+      }
       <input mfxCurrencyInput formControlName="amount" placeholder="0" />
       @if (form.controls.amount.invalid && form.controls.amount.touched) {
         <span class="mfx-form__error" role="alert">
@@ -49,6 +74,9 @@
 
     <label class="mfx-form__field">
       Categoría
+      @if (isAiFilled('categoryId')) {
+        <span class="mfx-movement-form__ai-badge" title="Completado por IA, confirma antes de guardar">✨</span>
+      }
       <select formControlName="categoryId">
         <option value="" disabled>Selecciona una categoría</option>
         @for (category of filteredCategories(); track category.id) {
@@ -69,6 +97,9 @@
 
     <label class="mfx-form__field">
       Fecha
+      @if (isAiFilled('date')) {
+        <span class="mfx-movement-form__ai-badge" title="Completado por IA, confirma antes de guardar">✨</span>
+      }
       <input type="date" formControlName="date" />
       @if (form.controls.date.invalid && form.controls.date.touched) {
         <span class="mfx-form__error" role="alert">La fecha es obligatoria.</span>
@@ -77,6 +108,9 @@
 
     <label class="mfx-form__field">
       Nota
+      @if (isAiFilled('note')) {
+        <span class="mfx-movement-form__ai-badge" title="Completado por IA, confirma antes de guardar">✨</span>
+      }
       <textarea formControlName="note" placeholder="Opcional"></textarea>
     </label>
 
@@ -91,7 +125,15 @@
         </button>
       }
       <button type="submit" class="mfx-btn-primary" [disabled]="saving() || deleting()">
-        {{ saving() ? 'Guardando…' : initialValue() ? 'Guardar cambios' : 'Agregar movimiento' }}
+        {{
+          saving()
+            ? 'Guardando…'
+            : attachmentRetryPending()
+              ? 'Reintentar subir adjunto'
+              : initialValue()
+                ? 'Guardar cambios'
+                : 'Agregar movimiento'
+        }}
       </button>
     </div>
   </form>

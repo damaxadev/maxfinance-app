@@ -5,7 +5,13 @@ import { of } from 'rxjs';
 import { vi } from 'vitest';
 
 import { Auth } from '../auth/auth';
-import { GROUP_ACTIVITY_CHANNEL_ID, MONTHLY_INSIGHT_CHANNEL_ID, Notifications, RECURRING_PAYMENTS_CHANNEL_ID } from './notifications';
+import {
+  GROUP_ACTIVITY_CHANNEL_ID,
+  MONTHLY_INSIGHT_CHANNEL_ID,
+  Notifications,
+  RECURRING_PAYMENTS_CHANNEL_ID,
+  SAVINGS_GOAL_CHANNEL_ID,
+} from './notifications';
 
 vi.mock('@angular/fire/firestore', () => ({
   Firestore: class {},
@@ -164,6 +170,14 @@ describe('Notifications', () => {
 
       expect(FirebaseMessaging.createChannel).toHaveBeenCalledWith(
         expect.objectContaining({ id: GROUP_ACTIVITY_CHANNEL_ID, importance: Importance.Default })
+      );
+    });
+
+    it('creates the fixed savings-goal channel', async () => {
+      await service.ensureNotificationChannel();
+
+      expect(FirebaseMessaging.createChannel).toHaveBeenCalledWith(
+        expect.objectContaining({ id: SAVINGS_GOAL_CHANNEL_ID, importance: Importance.Default })
       );
     });
 

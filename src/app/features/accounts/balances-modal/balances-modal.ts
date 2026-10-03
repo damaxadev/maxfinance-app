@@ -99,7 +99,7 @@ export class BalancesModal {
     this.analysisError.set(null);
     try {
       const categoryTotals = [...this.spentByCategory().entries()].map(([categoryId, total]) => ({
-        category: this.categoriesById().get(categoryId)?.name ?? 'Categoría eliminada',
+        category: categoryId === null ? 'Sin categoría' : this.categoriesById().get(categoryId)?.name ?? 'Categoría eliminada',
         total,
       }));
       const summary = this.budgetSummary();

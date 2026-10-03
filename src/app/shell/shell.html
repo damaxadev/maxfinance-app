@@ -13,6 +13,7 @@
     (groupRequested)="groupFormState.openCreate()"
     (sharedExpenseRequested)="sharedExpenseFormState.openCreate()"
     (recurringRequested)="recurringPaymentFormState.openCreate()"
+    (goalRequested)="goalFormState.openCreate()"
   />
 </div>
 
@@ -67,15 +68,28 @@
 
 @if (sharedExpenseFormState.request(); as request) {
   <mfx-modal
-    [title]="sharedExpenseFormState.isPersonalFlow() ? 'Agregar gasto personal' : 'Gasto compartido'"
+    [title]="
+      request.mode === 'edit'
+        ? sharedExpenseFormState.readOnly()
+          ? 'Gasto compartido'
+          : 'Editar gasto compartido'
+        : sharedExpenseFormState.isPersonalFlow()
+          ? 'Agregar gasto personal'
+          : 'Gasto compartido'
+    "
     (closed)="sharedExpenseFormState.close()"
   >
-    <mfx-shared-expense-form [fixedGroupId]="request.groupId" (saved)="sharedExpenseFormState.close()" />
+    <mfx-shared-expense-form
+      [fixedGroupId]="request.mode === 'create' ? request.groupId : request.movement.groupId"
+      [initialValue]="request.mode === 'edit' ? request.movement : null"
+      (saved)="sharedExpenseFormState.close()"
+      (deleted)="sharedExpenseFormState.close()"
+    />
   </mfx-modal>
 }
 
 @if (settlementFormState.context(); as context) {
-  <mfx-modal title="Marcar como saldada" (closed)="settlementFormState.close()">
+  <mfx-modal [title]="context.installmentRef ? 'Pagar cuota' : 'Marcar como saldada'" (closed)="settlementFormState.close()">
     <mfx-settlement-form [context]="context" (saved)="settlementFormState.close()" />
   </mfx-modal>
 }
@@ -96,5 +110,17 @@
 @if (balancesModalState.open()) {
   <mfx-modal title="Balances" (closed)="balancesModalState.close()">
     <mfx-balances-modal />
+  </mfx-modal>
+}
+
+@if (goalFormState.open()) {
+  <mfx-modal title="Nueva meta de ahorro" (closed)="goalFormState.close()">
+    <mfx-goal-form (saved)="goalFormState.close()" />
+  </mfx-modal>
+}
+
+@if (goalEntryFormState.context(); as context) {
+  <mfx-modal [title]="context.groupName" (closed)="goalEntryFormState.close()">
+    <mfx-goal-entry-form [context]="context" (saved)="goalEntryFormState.close()" />
   </mfx-modal>
 }

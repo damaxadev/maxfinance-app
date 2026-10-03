@@ -4,84 +4,126 @@
   </p>
 } @else {
   @for (entry of entries(); track entry.id) {
-    <div class="mfx-group-activity__row">
+    <div
+      class="mfx-group-activity__row"
+      [class.mfx-group-activity__row--clickable]="entry.kind === 'movement'"
+      (click)="entry.kind === 'movement' && openMovementOrGroupDetail(entry.movement)"
+    >
       @if (entry.kind === 'movement') {
-        <mfx-avatar
-          [photoUrl]="memberProfile(entry.movement.paidBy).photoURL"
-          [displayName]="memberProfile(entry.movement.paidBy).displayName"
-          [size]="28"
-        />
-        <div class="mfx-group-activity__info">
-          <span>
-            <strong>{{ memberProfile(entry.movement.paidBy).displayName || 'Alguien' }}</strong>
-            pagó {{ categoryLabel(entry.movement.categoryId) }}
-          </span>
-          <span class="mfx-group-activity__date">
-            {{ formatDate(entry.movement.date) }}
-            @if (showGroupTag()) {
-              · {{ groupName(entry.movement.groupId) }}
-            }
-          </span>
-        </div>
-        <mfx-animated-number class="mfx-group-activity__amount" [value]="entry.movement.amount" />
-      } @else {
-        <div class="mfx-group-activity__people">
+        <div class="mfx-group-activity__row-main">
           <mfx-avatar
-            [photoUrl]="memberProfile(entry.settlement.fromUid).photoURL"
-            [displayName]="memberProfile(entry.settlement.fromUid).displayName"
+            [photoUrl]="memberProfile(entry.movement.paidBy).photoURL"
+            [displayName]="memberProfile(entry.movement.paidBy).displayName"
             [size]="28"
           />
-          <mfx-avatar
-            [photoUrl]="memberProfile(entry.settlement.toUid).photoURL"
-            [displayName]="memberProfile(entry.settlement.toUid).displayName"
-            [size]="28"
-          />
-        </div>
-        <div class="mfx-group-activity__info">
-          <span>
-            <strong>{{ memberProfile(entry.settlement.fromUid).displayName || 'Alguien' }}</strong>
-            le pagó a
-            <strong>{{ memberProfile(entry.settlement.toUid).displayName || 'alguien' }}</strong>
-          </span>
-          <span class="mfx-group-activity__date">
-            {{ formatDate(entry.settlement.date) }}
-            @if (showGroupTag()) {
-              · {{ groupName(entry.settlement.groupId) }}
-            }
-          </span>
+          <div class="mfx-group-activity__info">
+            <span>
+              <strong>{{ memberProfile(entry.movement.paidBy).displayName || 'Alguien' }}</strong>
+              pagó {{ categoryLabel(entry.movement) }}
+            </span>
+            <span class="mfx-group-activity__date">
+              {{ formatDate(entry.movement.date) }}
+              @if (showGroupTag()) {
+                · {{ groupName(entry.movement.groupId) }}
+              }
+            </span>
 
-          @if (linkingSettlementId() === entry.settlement.id) {
-            <div class="mfx-group-activity__link-form">
-              <select [value]="linkAccountId()" (change)="linkAccountId.set($any($event.target).value)">
-                <option value="">Elige una cuenta</option>
-                @for (account of accounts(); track account.id) {
-                  <option [value]="account.id">{{ account.name }}</option>
-                }
-              </select>
+            @if (entry.movement.installments?.length) {
               <button
                 type="button"
-                class="mfx-btn-primary"
-                [disabled]="linking()"
-                (click)="confirmLinking(entry.settlement)"
+                class="mfx-group-activity__installments-toggle"
+                (click)="$event.stopPropagation(); toggleInstallments(entry.movement.id)"
               >
-                {{ linking() ? 'Guardando…' : 'Confirmar' }}
+                {{ paidInstallmentsCount(entry.movement) }} de {{ installmentsTotal(entry.movement) }} cuotas pagadas
+                <span
+                  class="mfx-group-activity__installments-chevron"
+                  [class.mfx-group-activity__installments-chevron--expanded]="isInstallmentsExpanded(entry.movement.id)"
+                  >›</span
+                >
               </button>
-              <button type="button" class="mfx-group-activity__cancel" [disabled]="linking()" (click)="cancelLinking()">
-                Cancelar
-              </button>
-              @if (linkError()) {
-                <p class="mfx-form__error" role="alert">{{ linkError() }}</p>
-              }
-            </div>
-          } @else if (alreadyLinked(entry.settlement)) {
-            <span class="mfx-group-activity__linked">✓ Ya registraste esto</span>
-          } @else if (linkLabel(entry.settlement); as label) {
-            <button type="button" class="mfx-group-activity__link-btn" (click)="startLinking(entry.settlement.id)">
-              {{ label }}
-            </button>
-          }
+            }
+          </div>
+          <mfx-animated-number class="mfx-group-activity__amount" [value]="entry.movement.amount" />
         </div>
-        <mfx-animated-number class="mfx-group-activity__amount" [value]="entry.settlement.amount" />
+
+        @if (entry.movement.installments?.length && isInstallmentsExpanded(entry.movement.id)) {
+          <div class="mfx-group-activity__installments">
+            @for (cuota of visibleInstallments(entry.movement); track cuota.index) {
+              <mfx-installment-row
+                [installment]="cuota.installment"
+                [index]="cuota.index"
+                [size]="'compact'"
+                [interactive]="canPayInstallment(entry.movement)"
+                (pay)="payInstallment(entry.movement, cuota.installment, cuota.index)"
+              />
+            }
+            @if (remainingInstallmentsCount(entry.movement) > 0) {
+              <span class="mfx-group-activity__more-installments">
+                +{{ remainingInstallmentsCount(entry.movement) }} cuotas más
+              </span>
+            }
+          </div>
+        }
+      } @else {
+        <div class="mfx-group-activity__row-main">
+          <div class="mfx-group-activity__people">
+            <mfx-avatar
+              [photoUrl]="memberProfile(entry.settlement.fromUid).photoURL"
+              [displayName]="memberProfile(entry.settlement.fromUid).displayName"
+              [size]="28"
+            />
+            <mfx-avatar
+              [photoUrl]="memberProfile(entry.settlement.toUid).photoURL"
+              [displayName]="memberProfile(entry.settlement.toUid).displayName"
+              [size]="28"
+            />
+          </div>
+          <div class="mfx-group-activity__info">
+            <span>
+              <strong>{{ memberProfile(entry.settlement.fromUid).displayName || 'Alguien' }}</strong>
+              le pagó a
+              <strong>{{ memberProfile(entry.settlement.toUid).displayName || 'alguien' }}</strong>
+            </span>
+            <span class="mfx-group-activity__date">
+              {{ formatDate(entry.settlement.date) }}
+              @if (showGroupTag()) {
+                · {{ groupName(entry.settlement.groupId) }}
+              }
+            </span>
+
+            @if (linkingSettlementId() === entry.settlement.id) {
+              <div class="mfx-group-activity__link-form">
+                <select [value]="linkAccountId()" (change)="linkAccountId.set($any($event.target).value)">
+                  <option value="">Elige una cuenta</option>
+                  @for (account of accounts(); track account.id) {
+                    <option [value]="account.id">{{ account.name }}</option>
+                  }
+                </select>
+                <button
+                  type="button"
+                  class="mfx-btn-primary"
+                  [disabled]="linking()"
+                  (click)="confirmLinking(entry.settlement)"
+                >
+                  {{ linking() ? 'Guardando…' : 'Confirmar' }}
+                </button>
+                <button type="button" class="mfx-group-activity__cancel" [disabled]="linking()" (click)="cancelLinking()">
+                  Cancelar
+                </button>
+                @if (linkError()) {
+                  <p class="mfx-form__error" role="alert">{{ linkError() }}</p>
+                }
+              </div>
+            } @else if (alreadyLinked(entry.settlement)) {
+              <span class="mfx-group-activity__linked">✓ Ya registraste esto</span>
+            } @else if (linkLabel(entry.settlement); as label) {
+              <button type="button" class="mfx-group-activity__link-btn" (click)="startLinking(entry.settlement.id)">
+                {{ label }}
+              </button>
+            }
+          </div>
+          <mfx-animated-number class="mfx-group-activity__amount" [value]="entry.settlement.amount" />
+        </div>
       }
     </div>
   }

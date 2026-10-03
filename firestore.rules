@@ -67,9 +67,18 @@ service cloud.firestore {
     // invitar por email, corren server-side vía Cloud Functions callable
     // (functions/src/index.ts: leaveGroup, inviteGroupMember) — no
     // necesitan un permiso de update más amplio en el cliente.
+    //
+    // Excepción: reachedMilestones (hitos de confetti de una meta de
+    // ahorro, ver GoalEntryForm) puede actualizarlo CUALQUIER miembro del
+    // grupo, no solo createdBy — quien registra el aporte que cruza un
+    // hito es quien lo marca, y no necesariamente creó la meta.
+    // affectedKeys().hasOnly([...]) acota el permiso a ESE campo nada más:
+    // no abre la puerta a cambiar name/members/targetAmount, etc.
     match /groups/{groupId} {
       allow read: if (isSignedIn() && request.auth.uid in resource.data.members) || isAdmin();
-      allow update, delete: if (isSignedIn() && request.auth.uid == resource.data.createdBy) || isAdmin();
+      allow update: if (isSignedIn() && request.auth.uid == resource.data.createdBy) || isAdmin() ||
+        (isGroupMember(groupId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reachedMilestones']));
+      allow delete: if (isSignedIn() && request.auth.uid == resource.data.createdBy) || isAdmin();
       allow create: if isSignedIn() && request.auth.uid in request.resource.data.members;
     }
 
@@ -126,6 +135,18 @@ service cloud.firestore {
       );
 
       allow update, delete: if isGroupMember(resource.data.groupId) || isAdmin();
+    }
+
+    // goalEntries — ledger de aportes/retiros de una meta de ahorro (groups
+    // con type == 'savings'), aparte de movements/settlements a propósito:
+    // no participa del balance de deuda entre personas. Mismo criterio que
+    // movements: cualquier miembro del grupo puede leer y crear su propio
+    // aporte/retiro, pero solo quien lo registró (uid) puede editarlo o
+    // eliminarlo — los demás miembros solo pueden verlo.
+    match /goalEntries/{entryId} {
+      allow read: if isGroupMember(resource.data.groupId);
+      allow create: if isGroupMember(request.resource.data.groupId) && isOwner(request.resource.data.uid);
+      allow update, delete: if isOwner(resource.data.uid) || isAdmin();
     }
   }
 }

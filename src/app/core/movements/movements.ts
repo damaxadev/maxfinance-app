@@ -9,12 +9,16 @@ import {
   getCountFromServer,
   increment,
   query,
+  updateDoc,
   where,
   writeBatch,
 } from '@angular/fire/firestore';
+import { Functions, httpsCallable } from '@angular/fire/functions';
 
 import { Auth } from '../auth/auth';
-import type { MovementSplit, MovementType, PersonalMovement, SharedMovement, SplitType } from '../../models/movement.model';
+import { AttachmentsService } from '../attachments/attachments';
+import type { PreparedAttachment } from '../attachments/attachment-compression';
+import type { Installment, MovementSplit, MovementType, PersonalMovement, SharedMovement, SplitType } from '../../models/movement.model';
 
 export type PersonalMovementWithId = PersonalMovement & { id: string };
 export type SharedMovementWithId = SharedMovement & { id: string };
@@ -32,14 +36,21 @@ export interface SharedMovementFormValue {
   groupId: string;
   paidBy: string;
   amount: number;
-  // null cuando paidBy no es quien registra el movimiento — no hay ninguna
-  // cuenta de otro miembro que se pueda leer o tocar (siempre privadas).
+  // null cuando paidBy no es quien registra el movimiento (no hay ninguna
+  // cuenta de otro miembro que se pueda leer o tocar, siempre privadas) o
+  // cuando quien registra eligió no asociar ninguna cuenta.
   accountId: string | null;
-  categoryId: string;
+  // null == sin categoría.
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryIcon: string | null;
   splitType: SplitType;
   splits: MovementSplit[];
   date: Date;
   note: string;
+  // Plan de cuotas opcional (ver DATABASE.md, "Pagos a cuotas") — ausente o
+  // null en el caso normal (sin cuotas).
+  installments?: Installment[] | null;
 }
 
 function signedAmount(type: MovementType, amount: number): number {
@@ -51,7 +62,9 @@ function signedAmount(type: MovementType, amount: number): number {
 })
 export class MovementsService {
   private readonly firestore = inject(Firestore);
+  private readonly functions = inject(Functions);
   private readonly auth = inject(Auth);
+  private readonly attachmentsService = inject(AttachmentsService);
 
   // uid + groupId==null son ambos filtros de igualdad, así que no requieren
   // índice compuesto. El filtro por groupId es obligatorio: la regla de
@@ -82,7 +95,7 @@ export class MovementsService {
   // (Fase 9, ver DATABASE.md "Gasto en grupo personal") — sigue siendo un
   // movimiento personal en todo lo demás (mismo formulario simple, mismo
   // efecto sobre el balance de la cuenta), solo cambia esta etiqueta.
-  async create(value: MovementFormValue, groupId: string | null = null): Promise<void> {
+  async create(value: MovementFormValue, groupId: string | null = null): Promise<string> {
     const uid = this.requireUid();
     const batch = writeBatch(this.firestore);
 
@@ -103,6 +116,36 @@ export class MovementsService {
     batch.update(accountRef, { balance: increment(signedAmount(value.type, value.amount)) });
 
     await batch.commit();
+    return movementRef.id;
+  }
+
+  // Sube/reemplaza el único adjunto de un movimiento (ver DATABASE.md /
+  // "Adjuntos") — se llama DESPUÉS de que el documento ya existe (create()/
+  // update() ya resolvieron), nunca antes: la regla de Storage necesita
+  // leer el movimiento vía firestore.get() para saber quién es su dueño
+  // (ver storage.rules), así que el doc tiene que existir primero. Path
+  // fijo sin extensión — subir uno nuevo siempre reemplaza al anterior.
+  async attachFile(movementId: string, attachment: PreparedAttachment): Promise<void> {
+    const path = `movements/${movementId}/attachment`;
+    await this.attachmentsService.upload(path, attachment.blob, attachment.contentType);
+    await updateDoc(doc(this.firestore, 'movements', movementId), {
+      attachmentPath: path,
+      attachmentContentType: attachment.contentType,
+    });
+  }
+
+  // Quita el adjunto de un movimiento YA guardado, sin tocar el resto del
+  // documento ni reemplazarlo por uno nuevo (ver AttachmentPicker, acción
+  // secundaria "Eliminar") — a diferencia de attachFile(), que siempre sube
+  // algo nuevo. Borra primero en Storage (best-effort, ver
+  // AttachmentsService.remove()) y luego limpia los dos campos en
+  // Firestore.
+  async removeAttachment(movementId: string, attachmentPath: string): Promise<void> {
+    await this.attachmentsService.remove(attachmentPath);
+    await updateDoc(doc(this.firestore, 'movements', movementId), {
+      attachmentPath: null,
+      attachmentContentType: null,
+    });
   }
 
   // Movements compartidos de un grupo — usados por el cálculo de balance y
@@ -197,7 +240,7 @@ export class MovementsService {
     return snapshot.data().count;
   }
 
-  async createShared(value: SharedMovementFormValue): Promise<void> {
+  async createShared(value: SharedMovementFormValue): Promise<string> {
     const uid = this.requireUid();
     const batch = writeBatch(this.firestore);
 
@@ -205,6 +248,8 @@ export class MovementsService {
     const movement: SharedMovement = {
       uid,
       categoryId: value.categoryId,
+      categoryName: value.categoryName,
+      categoryIcon: value.categoryIcon,
       type: 'expense',
       amount: value.amount,
       date: Timestamp.fromDate(value.date),
@@ -214,6 +259,8 @@ export class MovementsService {
       splitType: value.splitType,
       splits: value.splits,
       accountId: value.accountId,
+      installments: value.installments ?? null,
+      hasPendingInstallments: !!value.installments && value.installments.length > 0,
     };
     batch.set(movementRef, movement);
 
@@ -226,6 +273,86 @@ export class MovementsService {
     }
 
     await batch.commit();
+    return movementRef.id;
+  }
+
+  // Solo quien registró el gasto (uid) puede llegar hasta acá — ver la regla
+  // de Firestore para 'movements' y el guard en GroupActivity (createdBy ==
+  // uid, no paidBy: ver DATABASE.md). previous se usa solo para calcular el
+  // ajuste de balance de cuenta, nunca se reescribe tal cual.
+  async updateShared(id: string, previous: SharedMovement, next: SharedMovementFormValue): Promise<void> {
+    const batch = writeBatch(this.firestore);
+
+    const movementRef = doc(this.firestore, 'movements', id);
+    batch.update(movementRef, {
+      paidBy: next.paidBy,
+      amount: next.amount,
+      accountId: next.accountId,
+      categoryId: next.categoryId,
+      categoryName: next.categoryName,
+      categoryIcon: next.categoryIcon,
+      splitType: next.splitType,
+      splits: next.splits,
+      date: Timestamp.fromDate(next.date),
+      note: next.note,
+      // El plan de cuotas se regenera desde cero en cada edición (ver
+      // SharedExpenseForm.submit()/installmentPreview()) — nunca llega acá
+      // una cuota ya "paid": eso bloquea la edición entera (isLocked()).
+      installments: next.installments ?? null,
+      hasPendingInstallments: !!next.installments && next.installments.length > 0,
+    });
+
+    const previousAccountId = previous.accountId ?? null;
+    if (previousAccountId === next.accountId) {
+      if (next.accountId) {
+        batch.update(doc(this.firestore, 'accounts', next.accountId), {
+          balance: increment(previous.amount - next.amount),
+        });
+      }
+    } else {
+      if (previousAccountId) {
+        batch.update(doc(this.firestore, 'accounts', previousAccountId), { balance: increment(previous.amount) });
+      }
+      if (next.accountId) {
+        batch.update(doc(this.firestore, 'accounts', next.accountId), { balance: increment(-next.amount) });
+      }
+    }
+
+    await batch.commit();
+  }
+
+  async removeShared(id: string, movement: SharedMovement): Promise<void> {
+    const batch = writeBatch(this.firestore);
+
+    batch.delete(doc(this.firestore, 'movements', id));
+    if (movement.accountId) {
+      batch.update(doc(this.firestore, 'accounts', movement.accountId), { balance: increment(movement.amount) });
+    }
+
+    await batch.commit();
+    if (movement.attachmentPath) {
+      await this.attachmentsService.remove(movement.attachmentPath);
+    }
+  }
+
+  // Marca una cuota específica como pagada Y crea el settlement
+  // correspondiente, atómico, server-side (ver DATABASE.md, "Pagos a
+  // cuotas"). Corre vía Cloud Function porque actualizar installments en el
+  // movement requiere escribir un documento que el deudor no necesariamente
+  // "posee" (uid == quien registró el gasto, no necesariamente el deudor) —
+  // la regla de movements solo permite update a isOwner(uid). Ver
+  // SettlementForm, que llama a esto en vez de SettlementsService.create()
+  // cuando context().installmentRef está presente.
+  async payInstallment(movementId: string, installmentIndex: number, note: string): Promise<void> {
+    const callable = httpsCallable<
+      { movementId: string; installmentIndex: number; note: string },
+      { settlementId: string }
+    >(this.functions, 'payInstallment');
+    try {
+      await callable({ movementId, installmentIndex, note });
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Ocurrió un error inesperado.');
+    }
   }
 
   async update(id: string, previous: PersonalMovement, next: MovementFormValue): Promise<void> {
@@ -265,6 +392,9 @@ export class MovementsService {
     });
 
     await batch.commit();
+    if (movement.attachmentPath) {
+      await this.attachmentsService.remove(movement.attachmentPath);
+    }
   }
 
   private requireUid(): string {

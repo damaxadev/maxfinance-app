@@ -24,7 +24,7 @@ import { GroupsService, type GroupMemberProfile, type GroupWithId } from '../../
 import { MovementsService } from '../../../core/movements/movements';
 import { RecurringPayments } from '../../../core/recurring-payments/recurring-payments';
 import { ThemeService } from '../../../core/theme/theme';
-import { isSharedGroup } from '../../../models/group.model';
+import { isSavingsGoal, isSharedGroup } from '../../../models/group.model';
 import type { MovementType } from '../../../models/movement.model';
 import { GroupActivity } from '../../../features/groups/group-activity/group-activity';
 
@@ -60,6 +60,7 @@ interface HomeMovementItem {
   categoryName: string;
   amount: number;
   type: MovementType;
+  groupId: string | null;
   groupName: string | null;
   // Un grupo personal solo muestra su nombre como etiqueta ("Apartamento"),
   // sin la palabra "Compartido" — esa palabra se reserva para grupos type:
@@ -150,8 +151,14 @@ export class Home {
   readonly groupIds = computed(() => this.groups().map((group) => group.id));
   // "Gastos compartidos recientes" excluye los grupos type: 'personal' — no
   // son "compartidos", no aplica el concepto de deuda entre personas (ver
-  // DESIGN.md, "Grupos personales").
-  readonly sharedGroupIds = computed(() => this.groups().filter(isSharedGroup).map((group) => group.id));
+  // DESIGN.md, "Grupos personales"). También excluye type: 'savings'
+  // (isSharedGroup() da true para ambos — no es 'personal' — pero una meta
+  // nunca tiene movements/settlements que mostrar acá, ver group.model.ts).
+  readonly sharedGroupIds = computed(() =>
+    this.groups()
+      .filter((group) => isSharedGroup(group) && !isSavingsGoal(group))
+      .map((group) => group.id)
+  );
 
   private readonly movements = toSignal(
     toObservable(this.groupIds).pipe(switchMap((groupIds) => this.movementsService.combinedMovements$(groupIds))),
@@ -185,10 +192,14 @@ export class Home {
       .slice(0, 3)
       .map((movement) => ({
         id: movement.id,
-        categoryIcon: this.categoriesById().get(movement.categoryId)?.icon ?? '❓',
-        categoryName: this.categoriesById().get(movement.categoryId)?.name ?? 'Categoría eliminada',
+        categoryIcon: movement.categoryId === null ? '🗂️' : this.categoriesById().get(movement.categoryId)?.icon ?? '❓',
+        categoryName:
+          movement.categoryId === null
+            ? 'Sin categoría'
+            : this.categoriesById().get(movement.categoryId)?.name ?? 'Categoría eliminada',
         amount: movement.amount,
         type: movement.type,
+        groupId: movement.groupId,
         groupName: movement.groupId === null ? null : this.groupsById().get(movement.groupId)?.name ?? 'Grupo',
         groupIsShared: movement.groupId === null ? false : isSharedGroup(this.groupsById().get(movement.groupId)),
         dateLabel: movement.date.toDate().toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }),
@@ -233,7 +244,10 @@ export class Home {
   readonly categorySpend = computed(() => {
     const spentByCategory = sumExpensesByCategory(this.movements(), this.month, this.currentUid() ?? '');
     return [...spentByCategory.entries()]
-      .map(([categoryId, total]) => ({ label: this.categoriesById().get(categoryId)?.name ?? 'Categoría eliminada', total }))
+      .map(([categoryId, total]) => ({
+        label: categoryId === null ? 'Sin categoría' : this.categoriesById().get(categoryId)?.name ?? 'Categoría eliminada',
+        total,
+      }))
       .sort((a, b) => b.total - a.total);
   });
 
@@ -374,5 +388,15 @@ export class Home {
 
   openGroup(group: GroupWithId): void {
     this.groupDetailState.open(group.id);
+  }
+
+  // "Últimos movimientos" — antes el <mfx-card> no tenía ningún (click). Un
+  // movimiento de grupo (gasto compartido, o personal etiquetado a un grupo
+  // personal, ver Fase 9) abre el detalle de ESE grupo; uno sin grupo sigue
+  // sin hacer nada (se deja así a propósito, no se pidió cambiarlo).
+  openRecentMovement(movement: HomeMovementItem): void {
+    if (movement.groupId) {
+      this.groupDetailState.open(movement.groupId);
+    }
   }
 }

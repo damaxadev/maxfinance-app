@@ -43,3 +43,34 @@
     opacity: 1;
   }
 }
+
+.mfx-movement-form__receipt-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 0.8125rem;
+  opacity: 0.75;
+}
+
+.mfx-movement-form__receipt-cancel {
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.mfx-movement-form__receipt-note {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-style: italic;
+  opacity: 0.65;
+}
+
+.mfx-movement-form__ai-badge {
+  font-size: 0.8125rem;
+}

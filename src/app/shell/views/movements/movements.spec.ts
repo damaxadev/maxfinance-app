@@ -6,6 +6,7 @@ import { vi } from 'vitest';
 import { Movements } from './movements';
 import { Accounts } from '../../../core/accounts/accounts';
 import { Categories } from '../../../core/categories/categories';
+import { GroupDetailState } from '../../../core/group-detail-state/group-detail-state';
 import { GroupsService } from '../../../core/groups/groups';
 import { MovementsService } from '../../../core/movements/movements';
 import { MovementFormState } from '../../../core/movement-form-state/movement-form-state';
@@ -182,12 +183,18 @@ describe('Movements with shared expenses', () => {
     expect(item.kind).toBe('shared');
   });
 
-  it('does not open the edit form for a shared expense (no personal movement to edit)', () => {
-    const state = TestBed.inject(MovementFormState);
+  // Antes 'shared' no abría nada (item.personal era null, el único caso que
+  // manejaba editMovement()) — ahora abre el detalle del grupo en vez de
+  // intentar editar el movimiento directo.
+  it('tapping a shared expense opens its GroupDetail, not the (nonexistent) personal edit form', () => {
+    const movementFormState = TestBed.inject(MovementFormState);
+    const groupDetailState = TestBed.inject(GroupDetailState);
     const item = component.filteredMovements().find((m) => m.id === 'shared1')!;
+
     component.editMovement(item);
 
-    expect(state.request()).toBeNull();
+    expect(groupDetailState.groupId()).toBe('group1');
+    expect(movementFormState.request()).toBeNull();
   });
 });
 

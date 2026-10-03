@@ -3,7 +3,10 @@ import type { Timestamp } from 'firebase/firestore';
 import type { BudgetWithId } from '../budgets/budgets';
 
 export interface BudgetableMovement {
-  categoryId: string;
+  // null == sin categoría (solo posible en gastos compartidos) — cae fuera
+  // de cualquier presupuesto por categoría (no hay forma de presupuestar
+  // "sin categoría"), pero sigue contando en sumExpensesByMonth/el total.
+  categoryId: string | null;
   amount: number;
   type: string;
   date: Timestamp;
@@ -46,8 +49,8 @@ export function sumExpensesByCategory(
   movements: BudgetableMovement[],
   month: string,
   currentUid: string
-): Map<string, number> {
-  const sums = new Map<string, number>();
+): Map<string | null, number> {
+  const sums = new Map<string | null, number>();
   for (const movement of movements) {
     if (movement.type !== 'expense') {
       continue;
@@ -101,7 +104,7 @@ export function sumExpensesByMonth(
 
 export function calculateBudgetProgress(
   budgets: BudgetWithId[],
-  spentByCategory: Map<string, number>
+  spentByCategory: Map<string | null, number>
 ): CategoryBudgetProgress[] {
   return budgets.map((budget) => {
     const spent = spentByCategory.get(budget.categoryId) ?? 0;

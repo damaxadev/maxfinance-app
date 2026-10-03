@@ -4,11 +4,15 @@ import { BehaviorSubject } from 'rxjs';
 import { vi } from 'vitest';
 
 import { Groups } from './groups';
+import { GoalEntriesService } from '../../../core/goal-entries/goal-entries';
+import { GoalEntryFormState } from '../../../core/goal-entry-form-state/goal-entry-form-state';
+import { GoalFormState } from '../../../core/goal-form-state/goal-form-state';
 import { GroupsService } from '../../../core/groups/groups';
 import { ActiveGroup } from '../../../core/active-group/active-group';
 import { GroupDetailState } from '../../../core/group-detail-state/group-detail-state';
 import { GroupFormState } from '../../../core/group-form-state/group-form-state';
 import { SharedExpenseFormState } from '../../../core/shared-expense-form-state/shared-expense-form-state';
+import { of } from 'rxjs';
 
 const group1 = { id: 'group1', name: 'Apartamento', members: ['u1', 'u2'], createdBy: 'u1', createdAt: {} as never };
 const group2 = { id: 'group2', name: 'Viaje', members: ['u1'], createdBy: 'u1', createdAt: {} as never };
@@ -19,6 +23,15 @@ const personalGroup = {
   createdBy: 'u1',
   createdAt: {} as never,
   type: 'personal' as const,
+};
+const goal1 = {
+  id: 'goal1',
+  name: 'Vacaciones',
+  members: ['u1'],
+  createdBy: 'u1',
+  createdAt: {} as never,
+  type: 'savings' as const,
+  targetAmount: 1000,
 };
 
 const fourMembers = [
@@ -37,18 +50,21 @@ async function flushMicrotasks(): Promise<void> {
 describe('Groups', () => {
   let component: Groups;
   let fixture: ComponentFixture<Groups>;
-  let groups$: BehaviorSubject<(typeof group1)[]>;
+  let groups$: BehaviorSubject<(typeof group1 | typeof goal1)[]>;
   let getMemberProfiles: ReturnType<typeof vi.fn>;
+  let entries$: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
-    groups$ = new BehaviorSubject<(typeof group1)[]>([]);
+    groups$ = new BehaviorSubject<(typeof group1 | typeof goal1)[]>([]);
     getMemberProfiles = vi.fn().mockResolvedValue(fourMembers);
+    entries$ = vi.fn().mockReturnValue(of([]));
 
     await TestBed.configureTestingModule({
       imports: [Groups],
       providers: [
         provideNoopAnimations(),
         { provide: GroupsService, useValue: { groups$, getMemberProfiles } },
+        { provide: GoalEntriesService, useValue: { entries$ } },
       ],
     }).compileComponents();
 
@@ -187,7 +203,7 @@ describe('Groups', () => {
 
     component.addExpense(group1, event);
 
-    expect(sharedExpenseFormState.request()).toEqual({ groupId: 'group1' });
+    expect(sharedExpenseFormState.request()).toEqual({ mode: 'create', groupId: 'group1' });
     expect(stopPropagation).toHaveBeenCalled();
   });
 
@@ -201,6 +217,100 @@ describe('Groups', () => {
 
     component.addExpense(personalGroup, event);
 
-    expect(sharedExpenseFormState.request()).toEqual({ groupId: 'group-personal' });
+    expect(sharedExpenseFormState.request()).toEqual({ mode: 'create', groupId: 'group-personal' });
+  });
+
+  describe('Metas (type: "savings")', () => {
+    it('keeps goals out of "Tus grupos" and out of the active-group pill selector', () => {
+      groups$.next([group1, goal1]);
+      fixture.detectChanges();
+
+      expect(component.groups().map((g) => g.id)).toEqual(['group1']);
+      expect(component.goals().map((g) => g.id)).toEqual(['goal1']);
+      expect(component.activeGroup.groupId()).toBe('group1');
+    });
+
+    it('shows the goals empty state separately from the groups empty state', () => {
+      groups$.next([group1]);
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.textContent).not.toContain('Todavía no perteneces a ningún grupo');
+      expect(fixture.nativeElement.textContent).toContain('Todavía no tienes ninguna meta de ahorro');
+    });
+
+    it('opens the create-goal modal state via the "+ Meta" button', () => {
+      const goalFormState = TestBed.inject(GoalFormState);
+
+      component.goalFormState.openCreate();
+
+      expect(goalFormState.open()).toBe(true);
+    });
+
+    it('opens the group detail modal state when a goal card is tapped (same state as a regular group)', () => {
+      const groupDetailState = TestBed.inject(GroupDetailState);
+      groups$.next([goal1]);
+      fixture.detectChanges();
+
+      component.openDetail(goal1);
+
+      expect(groupDetailState.groupId()).toBe('goal1');
+    });
+
+    it('addGoalEntry() opens the goal-entry form state for that goal, without opening its detail', () => {
+      const goalEntryFormState = TestBed.inject(GoalEntryFormState);
+      groups$.next([goal1]);
+      fixture.detectChanges();
+      const event = new Event('click');
+      const stopPropagation = vi.spyOn(event, 'stopPropagation');
+
+      component.addGoalEntry(goal1, event);
+
+      expect(goalEntryFormState.context()).toEqual({ groupId: 'goal1', groupName: 'Vacaciones' });
+      expect(stopPropagation).toHaveBeenCalled();
+    });
+
+    it('goalProgressPercent() reads the live ledger via GoalEntriesService and computes the percentage of target', async () => {
+      entries$.mockReturnValue(of([{ type: 'contribution', amount: 250 }]));
+      groups$.next([goal1]); // target 1000 -> 25%
+      fixture.detectChanges();
+      await flushMicrotasks();
+      fixture.detectChanges();
+
+      expect(entries$).toHaveBeenCalledWith('goal1');
+      expect(component.goalProgressPercent(goal1)).toBe(25);
+    });
+
+    it('goalProgressPercent() clamps at 100 even if contributions surpass the target', async () => {
+      entries$.mockReturnValue(of([{ type: 'contribution', amount: 5000 }]));
+      groups$.next([goal1]);
+      fixture.detectChanges();
+      await flushMicrotasks();
+      fixture.detectChanges();
+
+      expect(component.goalProgressPercent(goal1)).toBe(100);
+    });
+
+    it('goalProgressPercent() for an "open-ended" goal is the % toward the next celebrationAmount multiple, not of a total', async () => {
+      const openEndedGoal = { ...goal1, goalMode: 'open-ended' as const, targetAmount: undefined, celebrationAmount: 1000000 };
+      entries$.mockReturnValue(of([{ type: 'contribution', amount: 650000 }]));
+      groups$.next([openEndedGoal]);
+      fixture.detectChanges();
+      await flushMicrotasks();
+      fixture.detectChanges();
+
+      expect(component.goalProgressPercent(openEndedGoal)).toBe(65);
+    });
+
+    it('shows "Celebra cada $X" instead of "Meta: $X" for an "open-ended" goal card', async () => {
+      const openEndedGoal = { ...goal1, goalMode: 'open-ended' as const, targetAmount: undefined, celebrationAmount: 1000000 };
+      groups$.next([openEndedGoal]);
+      fixture.detectChanges();
+      await flushMicrotasks();
+      fixture.detectChanges();
+
+      const text = fixture.nativeElement.textContent;
+      expect(text).toContain('Celebra cada');
+      expect(text).not.toContain('Meta:');
+    });
   });
 });

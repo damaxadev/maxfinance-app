@@ -14,11 +14,158 @@
   }
 }
 
+.mfx-group-detail__menu-btn {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  opacity: 0.8;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.mfx-group-detail__top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.mfx-group-detail__avatars {
+  display: flex;
+  align-items: center;
+
+  mfx-avatar {
+    border-radius: 50%;
+    border: 2px solid var(--surface);
+    margin-left: -0.625rem;
+
+    &:first-child {
+      margin-left: 0;
+    }
+  }
+}
+
+.mfx-group-detail__avatar-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-left: -0.625rem;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.mfx-group-detail__name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.mfx-group-detail__edit-name {
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
 .mfx-group-detail__total-spent {
   margin: 0;
   font-size: 1.5rem;
   font-weight: 700;
   color: var(--danger);
+}
+
+.mfx-group-detail__goal {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.mfx-group-detail__goal-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.mfx-group-detail__goal-saved {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.mfx-group-detail__goal-target {
+  margin: 0;
+  font-size: 0.8125rem;
+  opacity: 0.65;
+}
+
+.mfx-group-detail__goal-empty {
+  margin: 0;
+  font-size: 0.875rem;
+  opacity: 0.7;
+}
+
+.mfx-group-detail__goal-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--mfx-hairline-subtle);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.mfx-group-detail__goal-entry-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  font-size: 0.875rem;
+}
+
+.mfx-group-detail__goal-entry-date {
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+.mfx-group-detail__goal-entry-attachment {
+  border: none;
+  background: transparent;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 0.25rem;
+  vertical-align: middle;
+}
+
+.mfx-group-detail__goal-entry-amount {
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--primary);
+
+  &--withdrawal {
+    color: var(--danger);
+  }
 }
 
 .mfx-group-detail__member {
@@ -86,4 +233,80 @@
     opacity: 0.4;
     cursor: default;
   }
+}
+
+.mfx-group-detail__goal-breakdown-link {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  margin-top: 0.125rem;
+}
+
+.mfx-group-detail__contributors-chart-wrap {
+  position: relative;
+  height: 200px;
+  margin-bottom: 0.5rem;
+}
+
+.mfx-group-detail__contributor-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--mfx-hairline-subtle);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.mfx-group-detail__contributor-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+
+  &--primary {
+    background: var(--primary);
+  }
+  &--accent {
+    background: var(--accent);
+  }
+  &--danger {
+    background: var(--danger);
+  }
+  &--extra-1 {
+    background: #5ac8fa;
+  }
+  &--extra-2 {
+    background: #b388ff;
+  }
+  &--extra-3 {
+    background: #ff8fb1;
+  }
+}
+
+.mfx-group-detail__contributor-name {
+  flex: 1;
+  font-size: 0.875rem;
+  min-width: 0;
+}
+
+.mfx-group-detail__contributor-amount {
+  font-weight: 600;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.mfx-group-detail__contributor-percent {
+  width: 2.5rem;
+  text-align: right;
+  font-size: 0.8125rem;
+  opacity: 0.65;
 }
