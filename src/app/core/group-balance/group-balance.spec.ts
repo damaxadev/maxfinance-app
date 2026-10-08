@@ -63,11 +63,11 @@ describe('calculateGroupBalance', () => {
     expect(calculateGroupBalance(movements, settlements)).toEqual([{ fromUid: 'B', toUid: 'A', amount: 30 }]);
   });
 
-  it('simplifies a three-person chain down to a single transfer when it fully nets out', () => {
+  it('a pair whose debts cancel out inside the pair produces no transfer', () => {
     // Movimiento 1: A paga 90, dividido entre A, B y C (30 c/u) -> B y C deben 30 c/u a A.
     // Movimiento 2: B paga 60, dividido entre A y B (30 c/u) -> A le debe 30 a B.
-    // Neto: A = +60 -30 = +30; B = -30 +60 -30 = 0; C = -30.
-    // Resultado esperado: un solo giro, C le debe 30 a A (B queda saldado).
+    // Por pareja: A-B se cancelan (B le debe 30 a A, A le debe 30 a B -> 0). C le debe 30 a A.
+    // Resultado esperado: un solo giro, C le debe 30 a A.
     const movements = [
       movement('A', 90, [['A', 30], ['B', 30], ['C', 30]]),
       movement('B', 60, [['A', 30], ['B', 30]]),
@@ -76,12 +76,12 @@ describe('calculateGroupBalance', () => {
     expect(calculateGroupBalance(movements, [])).toEqual([{ fromUid: 'C', toUid: 'A', amount: 30 }]);
   });
 
-  it('matches multiple debtors against multiple creditors with the minimum number of transfers', () => {
-    // Se construye a propósito para que los netos finales sean exactamente
-    // A=-100, B=-50, C=+120, D=+30 (suma = 0):
-    //   Mov 1: C paga 150, dividido [A:100, C:50] -> A=-100, C=+100.
-    //   Mov 2: C paga 50, dividido [B:50]          -> B=-50,  C=+150.
-    //   Mov 3: D paga 30, dividido [C:30]          -> C=+120, D=+30.
+  it('keeps one line per pair even when a person both receives and owes', () => {
+    // Mov 1: C paga 150, dividido [A:100, C:50] -> A le debe 100 a C.
+    // Mov 2: C paga 50, dividido [B:50]          -> B le debe 50 a C.
+    // Mov 3: D paga 30, dividido [C:30]          -> C le debe 30 a D.
+    // C recibe de A y de B, pero también le debe a D: son parejas distintas,
+    // así que no se netean entre sí (el balance es por pareja, no global).
     const movements = [
       movement('C', 150, [['A', 100], ['C', 50]]),
       movement('C', 50, [['B', 50]]),
@@ -89,23 +89,15 @@ describe('calculateGroupBalance', () => {
     ];
 
     const edges = calculateGroupBalance(movements, []);
-    const totalOut = new Map<string, number>();
-    const totalIn = new Map<string, number>();
-    for (const edge of edges) {
-      totalOut.set(edge.fromUid, (totalOut.get(edge.fromUid) ?? 0) + edge.amount);
-      totalIn.set(edge.toUid, (totalIn.get(edge.toUid) ?? 0) + edge.amount);
-    }
 
-    // A y B solo pagan (nunca reciben); en total pagan exactamente lo que debían.
-    expect(totalOut.get('A')).toBe(100);
-    expect(totalOut.get('B')).toBe(50);
-    expect(totalIn.has('A')).toBe(false);
-    expect(totalIn.has('B')).toBe(false);
-    // C y D solo reciben, nunca pagan.
-    expect(totalOut.has('C')).toBe(false);
-    expect(totalOut.has('D')).toBe(false);
-    // Nunca más transferencias que deudores + acreedores - 1 (2 deudores, 2 acreedores).
-    expect(edges.length).toBeLessThanOrEqual(3);
+    expect(edges).toHaveLength(3);
+    expect(edges).toEqual(
+      expect.arrayContaining([
+        { fromUid: 'A', toUid: 'C', amount: 100 },
+        { fromUid: 'B', toUid: 'C', amount: 50 },
+        { fromUid: 'C', toUid: 'D', amount: 30 },
+      ])
+    );
   });
 
   it('rounds away floating-point noise from uneven percentage splits', () => {
@@ -127,6 +119,51 @@ describe('calculateGroupBalance', () => {
     const movements = [movement('A', 60, [['A', 60]])]; // A paga y se lo queda todo para sí mismo
 
     expect(calculateGroupBalance(movements, [])).toEqual([]);
+  });
+
+  // TEST OBLIGATORIO — escenario real que destapó el bug del neto global.
+  // La deuda es por pareja: Laura no le debe a Diego "a través" de Tatiana.
+  it('escenario Tatiana/Diego/Laura: una línea por pareja, sin netear contra terceros', () => {
+    // Diego paga 62.000 entre los tres: 62.000 / 3 = 20.666,66 con 0,02 de
+    // sobrante. distributeEqually le da el sobrante al primero del grupo; acá
+    // se asume que es Diego (quien paga), así que Tatiana y Laura deben
+    // 20.666,66 exacto. Si el sobrante cae en Tatiana, su línea sale 10.666,68
+    // (igual se muestra como $10.667).
+    // Tatiana paga 30.000 entre los tres: 10.000 c/u.
+    const movements = [
+      movement('diego', 62000, [['diego', 20666.68], ['tatiana', 20666.66], ['laura', 20666.66]]),
+      movement('tatiana', 30000, [['tatiana', 10000], ['diego', 10000], ['laura', 10000]]),
+    ];
+
+    const edges = calculateGroupBalance(movements, []);
+
+    expect(edges).toHaveLength(3);
+    expect(edges).toEqual(
+      expect.arrayContaining([
+        { fromUid: 'tatiana', toUid: 'diego', amount: 10666.66 },
+        { fromUid: 'laura', toUid: 'diego', amount: 20666.66 },
+        { fromUid: 'laura', toUid: 'tatiana', amount: 10000 },
+      ])
+    );
+  });
+
+  it('un pago entre dos personas solo reduce la deuda de ESA pareja', () => {
+    const movements = [
+      movement('diego', 62000, [['diego', 20666.68], ['tatiana', 20666.66], ['laura', 20666.66]]),
+      movement('tatiana', 30000, [['tatiana', 10000], ['diego', 10000], ['laura', 10000]]),
+    ];
+    // Laura le paga todo a Diego: baja solo lo que Laura le debe a Diego.
+    const settlements = [settlement('laura', 'diego', 20666.66)];
+
+    const edges = calculateGroupBalance(movements, settlements);
+
+    expect(edges).toHaveLength(2);
+    expect(edges).toEqual(
+      expect.arrayContaining([
+        { fromUid: 'tatiana', toUid: 'diego', amount: 10666.66 },
+        { fromUid: 'laura', toUid: 'tatiana', amount: 10000 },
+      ])
+    );
   });
 });
 

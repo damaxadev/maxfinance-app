@@ -9,75 +9,74 @@ export interface GroupDebtEdge {
   amount: number;
 }
 
-// Diferencias menores a esto se tratan como cero — evita que residuos de
-// coma flotante (splits porcentuales, por ejemplo) generen deudas fantasma
-// de un centavo.
-const EPSILON = 0.01;
-
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
+// Todo se calcula en centavos enteros: sumar y restar montos en coma
+// flotante deja residuos (0.1 + 0.2 !== 0.3) que aparecerían como deudas
+// fantasma. El redondeo a centavos ocurre una sola vez, al convertir.
+function toCents(amount: number): number {
+  return Math.round(amount * 100);
 }
 
 /**
  * Función pura: a partir de los movements compartidos de un grupo y sus
- * settlements, calcula el balance neto por persona y lo simplifica al
- * menor número de transferencias posible (algoritmo greedy: el mayor
- * deudor le paga al mayor acreedor, se repite hasta saldar a todos) — ver
- * DATABASE.md, "Balance de grupo (calculado, no almacenado)".
+ * settlements, calcula cuánto debe cada pareja de personas — una línea por
+ * pareja, sin simplificar contra terceros. Ver DATABASE.md, "Balance de
+ * grupo (calculado, no almacenado)".
+ *
+ * Cada split que no es de quien pagó es una deuda de esa persona hacia
+ * quien pagó (cada gasto solo genera deuda entre sus propios participantes).
+ * Cada settlement reduce SOLO la deuda de su pareja (fromUid → toUid). Dentro
+ * de una pareja sí se netean las deudas en ambos sentidos; entre parejas
+ * distintas nunca.
  *
  * No lee ni escribe splits[].settled: ese campo no participa del cálculo,
  * el balance sale enteramente de movements (splits) menos settlements.
  */
 export function calculateGroupBalance(movements: SharedMovement[], settlements: Settlement[]): GroupDebtEdge[] {
-  const net = new Map<string, number>();
-  const add = (uid: string, delta: number): void => {
-    net.set(uid, (net.get(uid) ?? 0) + delta);
+  // owed.get(deudor).get(acreedor) = centavos que el deudor le debe al
+  // acreedor, SIN restar todavía lo que el acreedor le debe a él.
+  const owed = new Map<string, Map<string, number>>();
+  const addOwed = (debtor: string, creditor: string, cents: number): void => {
+    if (debtor === creditor) {
+      return;
+    }
+    let row = owed.get(debtor);
+    if (!row) {
+      row = new Map<string, number>();
+      owed.set(debtor, row);
+    }
+    row.set(creditor, (row.get(creditor) ?? 0) + cents);
   };
+  const owedBy = (debtor: string, creditor: string): number => owed.get(debtor)?.get(creditor) ?? 0;
 
   for (const movement of movements) {
-    add(movement.paidBy, movement.amount);
     for (const split of movement.splits) {
-      add(split.uid, -split.amount);
+      addOwed(split.uid, movement.paidBy, toCents(split.amount));
     }
   }
 
+  // Un settlement de X a Y reduce lo que X le debe a Y. Si no había deuda,
+  // queda en negativo: Y pasa a deberle a X (mismo comportamiento de siempre).
   for (const settlement of settlements) {
-    add(settlement.fromUid, settlement.amount);
-    add(settlement.toUid, -settlement.amount);
+    addOwed(settlement.fromUid, settlement.toUid, -toCents(settlement.amount));
   }
-
-  const debtors: { uid: string; amount: number }[] = [];
-  const creditors: { uid: string; amount: number }[] = [];
-
-  for (const [uid, balance] of net) {
-    if (balance < -EPSILON) {
-      debtors.push({ uid, amount: -balance });
-    } else if (balance > EPSILON) {
-      creditors.push({ uid, amount: balance });
-    }
-  }
-
-  debtors.sort((a, b) => b.amount - a.amount);
-  creditors.sort((a, b) => b.amount - a.amount);
 
   const edges: GroupDebtEdge[] = [];
-  let i = 0;
-  let j = 0;
-  while (i < debtors.length && j < creditors.length) {
-    const debtor = debtors[i];
-    const creditor = creditors[j];
-    const settledAmount = Math.min(debtor.amount, creditor.amount);
+  const visitedPairs = new Set<string>();
 
-    edges.push({ fromUid: debtor.uid, toUid: creditor.uid, amount: round2(settledAmount) });
+  for (const [debtor, row] of owed) {
+    for (const creditor of row.keys()) {
+      const pairKey = [debtor, creditor].sort().join('|');
+      if (visitedPairs.has(pairKey)) {
+        continue;
+      }
+      visitedPairs.add(pairKey);
 
-    debtor.amount -= settledAmount;
-    creditor.amount -= settledAmount;
-
-    if (debtor.amount <= EPSILON) {
-      i++;
-    }
-    if (creditor.amount <= EPSILON) {
-      j++;
+      const net = owedBy(debtor, creditor) - owedBy(creditor, debtor);
+      if (net > 0) {
+        edges.push({ fromUid: debtor, toUid: creditor, amount: net / 100 });
+      } else if (net < 0) {
+        edges.push({ fromUid: creditor, toUid: debtor, amount: -net / 100 });
+      }
     }
   }
 
