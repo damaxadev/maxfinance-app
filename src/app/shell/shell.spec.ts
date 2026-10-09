@@ -338,23 +338,6 @@ describe('Shell', () => {
     expect(component.groupDetailState.groupId()).toBeNull();
   });
 
-  it('renders the "ver toda la actividad" modal once a group id is open', () => {
-    component.groupActivityFullState.open('group1');
-    fixture.detectChanges();
-
-    expect(fixture.nativeElement.querySelector('mfx-group-activity-full')).toBeTruthy();
-  });
-
-  it('closes the group activity full modal via the shared state', () => {
-    component.groupActivityFullState.open('group1');
-    fixture.detectChanges();
-
-    component.groupActivityFullState.close();
-    fixture.detectChanges();
-
-    expect(fixture.nativeElement.querySelector('mfx-group-activity-full')).toBeNull();
-  });
-
   it('renders the recurring payment form modal once a request is open', () => {
     component.recurringPaymentFormState.openCreate();
     fixture.detectChanges();

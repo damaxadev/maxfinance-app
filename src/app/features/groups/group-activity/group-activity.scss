@@ -81,41 +81,6 @@
   white-space: nowrap;
 }
 
-.mfx-group-activity__link-btn {
-  align-self: flex-start;
-  border: none;
-  background: transparent;
-  color: var(--primary);
-  font-family: inherit;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
-}
-
-.mfx-group-activity__linked {
-  font-size: 0.8125rem;
-  color: var(--primary);
-  opacity: 0.85;
-}
-
-.mfx-group-activity__link-form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-
-  select {
-    font-family: inherit;
-    font-size: 0.8125rem;
-    color: var(--text);
-    background: var(--bg);
-    border: 1px solid var(--mfx-hairline);
-    border-radius: 8px;
-    padding: 0.375rem 0.5rem;
-  }
-}
-
 // El espaciado/indicadores de cada cuota los da mfx-installment-row — esto
 // solo marca el bloque como una sub-sección distinta de la fila principal
 // (línea de tiempo de pagos, ver DATABASE.md / "Pagos a cuotas"). Se alinea
@@ -136,13 +101,56 @@
   padding: 0.375rem 0;
 }
 
-.mfx-group-activity__cancel {
-  border: none;
-  background: transparent;
-  color: var(--text);
-  opacity: 0.7;
-  font-family: inherit;
+// Marca de estado (gasto sin cuotas, 2 personas, o por fila de allocation
+// dentro del desglose de un abono) — pendiente queda sin marca a propósito
+// (ver DATABASE.md, "Balance de grupo y abonos": "sin marca o muy sutil").
+.mfx-group-activity__status-badge {
+  font-weight: 600;
+
+  &--paid {
+    color: var(--primary);
+  }
+
+  &--partial {
+    color: var(--accent);
+  }
+}
+
+// Desglose por persona de un gasto de 3+ — mismo bloque visual que
+// mfx-group-activity__installments (cuotas), nunca coexisten en el mismo
+// gasto (las cuotas solo existen en grupos de 2).
+.mfx-group-activity__debtor-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0;
   font-size: 0.8125rem;
-  cursor: pointer;
-  padding: 0;
+
+  &:not(:last-child) {
+    border-bottom: 1px solid var(--mfx-hairline-subtle);
+  }
+}
+
+.mfx-group-activity__note {
+  font-size: 0.8125rem;
+  opacity: 0.8;
+  font-style: italic;
+}
+
+.mfx-group-activity__attachment-indicator {
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+// Un abono anulado se ve, pero tachado — nunca desaparece del historial
+// (ver DATABASE.md): es evidencia de que algo se registró y se corrigió.
+.mfx-group-activity__row-main--voided {
+  opacity: 0.55;
+  text-decoration: line-through;
+
+  .mfx-group-activity__installments-toggle,
+  .mfx-group-activity__link-btn,
+  mfx-animated-number {
+    text-decoration: none;
+  }
 }

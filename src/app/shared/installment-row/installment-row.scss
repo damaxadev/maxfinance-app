@@ -30,6 +30,11 @@
   opacity: 0.9;
 }
 
+.mfx-installment-row__partial-badge {
+  color: var(--accent);
+  opacity: 0.95;
+}
+
 .mfx-installment-row__pay-btn {
   border: none;
   background: transparent;
@@ -91,6 +96,7 @@
   }
 
   .mfx-installment-row__paid-badge,
+  .mfx-installment-row__partial-badge,
   .mfx-installment-row__pay-btn {
     font-size: 0.8125rem;
   }
@@ -130,6 +136,7 @@
   }
 
   .mfx-installment-row__paid-badge,
+  .mfx-installment-row__partial-badge,
   .mfx-installment-row__pay-btn {
     margin-left: calc(22px + 0.5rem);
   }

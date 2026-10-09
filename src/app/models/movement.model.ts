@@ -29,6 +29,13 @@ export interface BaseMovement {
   amount: number;
   date: Timestamp;
   note: string;
+  // Cuándo se registró de verdad (serverTimestamp, ver MovementsService) —
+  // distinto de `date`, que el usuario elige libremente. El orden del
+  // historial (GroupActivity) usa esto, no `date` — ver DATABASE.md,
+  // "Balance de grupo y abonos". Ausente en movements de antes de este
+  // campo (cae a `date` al ordenar); null en el snapshot local mientras el
+  // serverTimestamp todavía no se resuelve contra el servidor.
+  createdAt?: Timestamp | null;
   // Un solo adjunto por movimiento (foto de recibo o PDF) — ver
   // AttachmentsService. Path fijo "movements/{id}/attachment" (sin
   // extensión: el tipo real vive en attachmentContentType, no en el

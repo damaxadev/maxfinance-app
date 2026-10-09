@@ -23,12 +23,12 @@ import { GroupFormState } from '../core/group-form-state/group-form-state';
 import { GroupForm } from '../features/groups/group-form/group-form';
 import { GroupDetailState } from '../core/group-detail-state/group-detail-state';
 import { GroupDetail } from '../features/groups/group-detail/group-detail';
-import { GroupActivityFullState } from '../core/group-activity-full-state/group-activity-full-state';
-import { GroupActivityFull } from '../features/groups/group-activity-full/group-activity-full';
 import { SharedExpenseFormState } from '../core/shared-expense-form-state/shared-expense-form-state';
 import { SharedExpenseForm } from '../features/groups/shared-expense-form/shared-expense-form';
 import { SettlementFormState } from '../core/settlement-form-state/settlement-form-state';
-import { SettlementForm } from '../features/groups/settlement-form/settlement-form';
+import { AbonoForm } from '../features/groups/abono-form/abono-form';
+import { AbonoDetailState } from '../core/abono-detail-state/abono-detail-state';
+import { AbonoDetail } from '../features/groups/abono-detail/abono-detail';
 import { RecurringPaymentFormState } from '../core/recurring-payment-form-state/recurring-payment-form-state';
 import { RecurringPaymentForm } from '../features/recurring-payments/recurring-payment-form/recurring-payment-form';
 import { GoalFormState } from '../core/goal-form-state/goal-form-state';
@@ -47,9 +47,9 @@ import { GoalEntryForm } from '../features/goals/goal-entry-form/goal-entry-form
     CategoryForm,
     GroupForm,
     GroupDetail,
-    GroupActivityFull,
     SharedExpenseForm,
-    SettlementForm,
+    AbonoForm,
+    AbonoDetail,
     RecurringPaymentForm,
     GoalForm,
     GoalEntryForm,
@@ -71,9 +71,9 @@ export class Shell implements AfterViewInit, OnDestroy {
   readonly categoryFormState = inject(CategoryFormState);
   readonly groupFormState = inject(GroupFormState);
   readonly groupDetailState = inject(GroupDetailState);
-  readonly groupActivityFullState = inject(GroupActivityFullState);
   readonly sharedExpenseFormState = inject(SharedExpenseFormState);
   readonly settlementFormState = inject(SettlementFormState);
+  readonly abonoDetailState = inject(AbonoDetailState);
   readonly recurringPaymentFormState = inject(RecurringPaymentFormState);
   readonly goalFormState = inject(GoalFormState);
   readonly goalEntryFormState = inject(GoalEntryFormState);

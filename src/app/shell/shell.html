@@ -60,12 +60,6 @@
   </mfx-modal>
 }
 
-@if (groupActivityFullState.groupId(); as groupId) {
-  <mfx-modal title="Actividad del grupo" (closed)="groupActivityFullState.close()">
-    <mfx-group-activity-full [groupId]="groupId" />
-  </mfx-modal>
-}
-
 @if (sharedExpenseFormState.request(); as request) {
   <mfx-modal
     [title]="
@@ -89,8 +83,14 @@
 }
 
 @if (settlementFormState.context(); as context) {
-  <mfx-modal [title]="context.installmentRef ? 'Pagar cuota' : 'Marcar como saldada'" (closed)="settlementFormState.close()">
-    <mfx-settlement-form [context]="context" (saved)="settlementFormState.close()" />
+  <mfx-modal title="Abonar" (closed)="settlementFormState.close()">
+    <mfx-abono-form [context]="context" (saved)="settlementFormState.close()" />
+  </mfx-modal>
+}
+
+@if (abonoDetailState.context(); as context) {
+  <mfx-modal title="Abono" (closed)="abonoDetailState.close()">
+    <mfx-abono-detail [context]="context" />
   </mfx-modal>
 }
 

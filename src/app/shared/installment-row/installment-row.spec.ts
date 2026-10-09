@@ -173,4 +173,69 @@ describe('InstallmentRow', () => {
 
     expect(parentClick).not.toHaveBeenCalled();
   });
+
+  // `debt` (el balance real, computeDebts/debtsByMovement) manda sobre
+  // installment().status en cuanto está presente — ver DATABASE.md,
+  // "Balance de grupo y abonos". Sin él, cae al criterio viejo (los tests
+  // de arriba, que nunca lo pasan).
+  describe('[debt] — balance real (computeDebts), nunca installments[].status', () => {
+    function fakeDebt(overrides: Partial<{ status: 'pendiente' | 'parcial' | 'pagada'; paid: number; total: number; remaining: number }> = {}) {
+      return {
+        movementId: 'm1',
+        debtorUid: 'u2',
+        creditorUid: 'u1',
+        installmentIndex: 0,
+        total: overrides.total ?? 50000,
+        paid: overrides.paid ?? 0,
+        remaining: overrides.remaining ?? 50000,
+        status: overrides.status ?? 'pendiente',
+        anomaly: false,
+      };
+    }
+
+    it('[debt] pagada se ve pagada aunque installment().status diga "pending"', () => {
+      fixture.componentRef.setInput('installment', { dueDate: ts('2026-11-02'), amount: 50000, status: 'pending' });
+      fixture.componentRef.setInput('index', 0);
+      fixture.componentRef.setInput('debt', fakeDebt({ status: 'pagada', paid: 50000, remaining: 0 }));
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.textContent).toContain('✓ Pagada');
+      expect(fixture.nativeElement.querySelector('.mfx-installment-row__pay-btn')).toBeNull();
+    });
+
+    it('[debt] pendiente se ve pendiente aunque installment().status diga "paid" (p. ej. desactualizado)', () => {
+      fixture.componentRef.setInput('installment', { dueDate: ts('2026-11-02'), amount: 50000, status: 'paid' });
+      fixture.componentRef.setInput('index', 0);
+      fixture.componentRef.setInput('debt', fakeDebt({ status: 'pendiente' }));
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.textContent).not.toContain('✓ Pagada');
+      expect(fixture.nativeElement.querySelector('.mfx-installment-row__pay-btn')).toBeTruthy();
+    });
+
+    it('[debt] parcial muestra "Parcial · pagó X · resta Y" Y sigue ofreciendo el botón (para pagar el resto)', () => {
+      fixture.componentRef.setInput('installment', { dueDate: ts('2026-11-02'), amount: 50000, status: 'pending' });
+      fixture.componentRef.setInput('index', 0);
+      fixture.componentRef.setInput('interactive', true);
+      fixture.componentRef.setInput('debt', fakeDebt({ status: 'parcial', paid: 20000, remaining: 30000 }));
+      fixture.detectChanges();
+
+      const partialBadge = fixture.nativeElement.querySelector('.mfx-installment-row__partial-badge');
+      expect(partialBadge.textContent).toContain('Parcial');
+      expect(partialBadge.textContent).toContain('pagó');
+      expect(partialBadge.textContent).toContain('resta');
+      expect(fixture.nativeElement.querySelector('.mfx-installment-row__pay-btn')).toBeTruthy();
+    });
+
+    it('[debt] parcial no interactivo no muestra el botón, pero sí la marca', () => {
+      fixture.componentRef.setInput('installment', { dueDate: ts('2026-11-02'), amount: 50000, status: 'pending' });
+      fixture.componentRef.setInput('index', 0);
+      fixture.componentRef.setInput('interactive', false);
+      fixture.componentRef.setInput('debt', fakeDebt({ status: 'parcial', paid: 20000, remaining: 30000 }));
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('.mfx-installment-row__partial-badge')).toBeTruthy();
+      expect(fixture.nativeElement.querySelector('.mfx-installment-row__pay-btn')).toBeNull();
+    });
+  });
 });

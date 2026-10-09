@@ -129,26 +129,45 @@ body {
   opacity: 0.85;
   font-size: 0.875rem;
 
-  input,
-  select,
-  textarea {
-    font-family: inherit;
-    font-size: 1rem;
-    color: var(--text);
-    background: var(--bg);
-    border: 1px solid var(--mfx-hairline);
-    border-radius: 10px;
-    padding: 0.625rem 0.75rem;
-
-    &:focus {
-      outline: none;
-      border-color: var(--primary);
-    }
-  }
-
   textarea {
     resize: vertical;
     min-height: 4.5rem;
+  }
+}
+
+// Mismo input/select/textarea de un campo etiquetado (.mfx-form__field) Y
+// de un campo suelto, sin su propio <label> alrededor (.mfx-input, ver más
+// abajo) — un solo lugar para el look (borde/fondo/radio/padding/foco), en
+// vez de copiarlo a mano cada vez que algo necesita verse como "Monto".
+.mfx-form__field input,
+.mfx-form__field select,
+.mfx-form__field textarea,
+.mfx-input {
+  font-family: inherit;
+  font-size: 1rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--mfx-hairline);
+  border-radius: 10px;
+  padding: 0.625rem 0.75rem;
+
+  &:focus {
+    outline: none;
+    border-color: var(--primary);
+  }
+}
+
+// Input/select FUERA de un <label class="mfx-form__field"> — el monto
+// parcial de una fila (AbonoForm), "Distribuir un monto" (AbonoForm), la
+// cuenta de "Registrar como gasto/ingreso" (AbonoDetail). Altura táctil
+// explícita: acá no tiene el aire que le da un <label> alrededor.
+.mfx-input {
+  min-height: 44px;
+
+  // Ver AbonoForm: "Distribuir un monto" cuando autoDistributeError() no
+  // es null — nunca oculta el campo, solo marca cuál está mal.
+  &--error {
+    border-color: var(--danger);
   }
 }
 
@@ -221,4 +240,76 @@ body {
     cursor: default;
     text-decoration: none;
   }
+}
+
+// Mismo lenguaje de forma que .mfx-btn-primary (píldora, mismo padding/
+// tipografía/altura táctil) para las acciones secundarias de una pantalla
+// con un botón principal propio (ver AbonoDetail/AbonoForm) — no reusa esa
+// clase para no arriesgar las demás pantallas que ya la tienen tal cual.
+.mfx-btn-secondary,
+.mfx-btn-danger-outline,
+.mfx-btn-danger-solid {
+  border-radius: 999px;
+  padding: 0.75rem 1.5rem;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+  transition: opacity 150ms ease-out, background-color 150ms ease-out, color 150ms ease-out;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+}
+
+// Neutro, de contorno — "Cancelar", "Distribuir", cualquier acción que no
+// sea ni la principal de la pantalla ni destructiva.
+.mfx-btn-secondary {
+  border: 1px solid var(--mfx-hairline);
+  background: transparent;
+  color: var(--text);
+
+  &:not(:disabled):hover {
+    background: var(--surface);
+  }
+}
+
+// Destructivo pero secundario — contorno rojo, nunca sólido, para que se
+// note claramente menos prominente que la acción principal de la pantalla
+// (ver AbonoDetail, "Anular abono": nunca al mismo nivel que "Registrar
+// como gasto/ingreso").
+.mfx-btn-danger-outline {
+  border: 1px solid var(--danger);
+  background: transparent;
+  color: var(--danger);
+
+  &:not(:disabled):hover {
+    background: var(--danger);
+    color: var(--bg);
+  }
+}
+
+// Destructivo y sólido — solo para la confirmación FINAL de una acción
+// destructiva ya aceptada a propósito (ver AbonoDetail, "Sí, anular"
+// dentro del formulario de motivo), un paso más allá de
+// .mfx-btn-danger-outline — nunca el primer botón que se ve.
+.mfx-btn-danger-solid {
+  border: none;
+  background: var(--danger);
+  color: var(--bg);
+
+  &:not(:disabled):hover {
+    opacity: 0.9;
+  }
+}
+
+// Ancho completo, para una columna de acciones apiladas (ver AbonoDetail,
+// "Acciones") — a diferencia de una fila de botones uno junto al otro (ver
+// GroupBalance, "Abonar"/"Marcar como saldada").
+.mfx-btn-block {
+  display: block;
+  width: 100%;
+  text-align: center;
 }

@@ -117,24 +117,61 @@ service cloud.firestore {
       allow update, delete: if isOwner(resource.data.uid) || isAdmin();
     }
 
-    // settlements — solo miembros del grupo correspondiente; create además
-    // exige ser una de las dos partes de la deuda (no cualquier miembro).
-    // Verificado con el flujo real de Fase 5 (SettlementsService.create()):
-    // el cliente siempre asigna fromUid/toUid a partir de un edge de deuda
-    // donde el usuario actual ya es una de las dos partes, así que nunca
-    // choca con este create. Tampoco hizo falta una Cloud Function — el
-    // batch de settlement + movement personal opcional se hace directo,
-    // porque ambos son creates (nunca updates) desde cero.
+    // settlements (abonos) — solo miembros del grupo correspondiente;
+    // create además exige ser una de las dos partes de la deuda (no
+    // cualquier miembro). Verificado con el flujo real (SettlementsService.
+    // createSettlement()/create()): el cliente siempre asigna fromUid/toUid
+    // a partir de una deuda donde el usuario actual ya es una de las dos
+    // partes, así que nunca choca con este create. Tampoco hizo falta una
+    // Cloud Function para esto — el batch de settlement + movement personal
+    // opcional se hace directo, porque ambos son creates (nunca updates)
+    // desde cero.
+    //
+    // createdBy, si está presente, tiene que ser quien llama — nadie puede
+    // anotar un abono a nombre de otro. Se permite que falte del todo
+    // (abonos "legacy" de antes de este campo, ver DATABASE.md).
+    //
+    // Un abono es un ledger: una vez creado, amount/allocations/fromUid/
+    // toUid/groupId/date/createdBy/createdAt son inmutables para siempre —
+    // ver DATABASE.md, "Balance de grupo y abonos". Un update solo puede
+    // ser UNA de estas dos cosas, nunca una mezcla, y solo mientras el
+    // abono está activo (uno ya anulado es inmutable por completo — nunca
+    // se des-anula, para corregirlo se registra uno nuevo):
+    //   (a) anular (status: 'active'|ausente -> 'voided', con voidedBy ==
+    //       quien llama y un voidReason de al menos 3 caracteres), o
+    //   (b) nota y/o comprobante (note/attachmentPath/attachmentContentType).
+    // En los dos casos, solo fromUid o toUid — ni el admin ni un tercero
+    // del grupo: a diferencia de antes, esto ya no es un superpoder de
+    // administración (ver DATABASE.md). delete sigue siendo solo para
+    // admin: un abono no se borra, se anula.
     match /settlements/{settlementId} {
       allow read: if isGroupMember(resource.data.groupId);
 
-      allow create: if isAdmin() || (
+      allow create: if (isAdmin() || (
         isGroupMember(request.resource.data.groupId) &&
         (request.auth.uid == request.resource.data.fromUid ||
          request.auth.uid == request.resource.data.toUid)
+      )) && (
+        !('createdBy' in request.resource.data) ||
+        request.resource.data.createdBy == request.auth.uid
       );
 
-      allow update, delete: if isGroupMember(resource.data.groupId) || isAdmin();
+      allow update: if (request.auth.uid == resource.data.fromUid || request.auth.uid == resource.data.toUid) && (
+        (
+          resource.data.get('status', 'active') == 'active' &&
+          request.resource.data.status == 'voided' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'voidedBy', 'voidedAt', 'voidReason']) &&
+          request.resource.data.voidedBy == request.auth.uid &&
+          request.resource.data.voidReason is string &&
+          request.resource.data.voidReason.size() >= 3
+        ) ||
+        (
+          resource.data.get('status', 'active') == 'active' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['note', 'attachmentPath', 'attachmentContentType'])
+        )
+      );
+
+      allow delete: if isAdmin();
     }
 
     // goalEntries — ledger de aportes/retiros de una meta de ahorro (groups

@@ -152,3 +152,22 @@
 .mfx-shared-expense-form__ai-badge {
   font-size: 0.8125rem;
 }
+
+.mfx-shared-expense-form__locking-settlements {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.mfx-shared-expense-form__locking-link {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}

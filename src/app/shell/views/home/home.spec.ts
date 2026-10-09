@@ -447,6 +447,9 @@ describe('Home "Gastos compartidos recientes" (wiring into GroupActivity)', () =
     const groupActivity = fixture.debugElement.query(By.directive(GroupActivity)).componentInstance as GroupActivity;
     expect(groupActivity.linkToGroupDetail()).toBe(true);
     expect(groupActivity.collapsedByDefault()).toBe(true);
+    // Inicio sigue limitado (resumen) — a diferencia de GroupDetail, que
+    // ahora muestra el historial completo sin "Ver todos" (ver DATABASE.md).
+    expect(groupActivity.limit()).toBe(5);
   });
 });
 

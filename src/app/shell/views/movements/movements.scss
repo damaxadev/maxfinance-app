@@ -66,6 +66,16 @@
   color: var(--accent);
 }
 
+// Un movimiento personal creado desde "Registrar como gasto/ingreso" cuyo
+// abono de origen se anuló DESPUÉS — nunca se borra solo (ver
+// movements.ts, isVoidedAbono()), queda marcado para no leerse como un
+// gasto/ingreso legítimo.
+.mfx-movements__voided-tag {
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: var(--danger);
+}
+
 .mfx-movements__amount--income {
   color: var(--primary);
 }

@@ -16,9 +16,11 @@ import {
 } from '../../../core/movements/movements';
 import { MovementFormState } from '../../../core/movement-form-state/movement-form-state';
 import { AccountFormState } from '../../../core/account-form-state/account-form-state';
+import { SettlementsService } from '../../../core/settlements/settlements';
 import type { AccountType } from '../../../models/account.model';
 import { isSharedGroup } from '../../../models/group.model';
 import type { MovementType } from '../../../models/movement.model';
+import type { SettlementStatus } from '../../../models/settlement.model';
 
 const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   efectivo: 'Efectivo',
@@ -60,6 +62,7 @@ export class Movements {
   private readonly groupsService = inject(GroupsService);
   private readonly accountFormState = inject(AccountFormState);
   private readonly groupDetailState = inject(GroupDetailState);
+  private readonly settlementsService = inject(SettlementsService);
   readonly movementFormState = inject(MovementFormState);
 
   readonly accounts = toSignal(this.accountsService.accounts$, { initialValue: [] });
@@ -76,6 +79,21 @@ export class Movements {
   readonly sharedMovements = toSignal(
     toObservable(this.groupIds).pipe(switchMap((groupIds) => this.movementsService.sharedMovementsForGroups$(groupIds))),
     { initialValue: [] as SharedMovementWithId[] }
+  );
+
+  // Marcador "Abono anulado" (ver DATABASE.md) — un movimiento personal
+  // creado vía "Registrar como gasto/ingreso" guarda el id del abono que lo
+  // originó (settlementId); si ese abono se anula DESPUÉS, este movimiento
+  // sigue existiendo (nunca se borra solo), pero ya no refleja algo real —
+  // se marca para que no quede leyéndose como un gasto/ingreso legítimo.
+  private readonly linkedSettlementIds = computed(() =>
+    this.movements()
+      .map((m) => m.settlementId)
+      .filter((id): id is string => !!id)
+  );
+  private readonly settlementStatusById = toSignal(
+    toObservable(this.linkedSettlementIds).pipe(switchMap((ids) => this.settlementsService.settlementsStatusByIds$(ids))),
+    { initialValue: new Map<string, SettlementStatus | undefined>() }
   );
 
   readonly filterAccountId = signal('');
@@ -165,6 +183,11 @@ export class Movements {
 
   formatDate(date: Timestamp): string {
     return date.toDate().toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
+  }
+
+  isVoidedAbono(item: MovementListItem): boolean {
+    const settlementId = item.personal?.settlementId;
+    return settlementId != null && this.settlementStatusById().get(settlementId) === 'voided';
   }
 
   openCreateAccount(): void {

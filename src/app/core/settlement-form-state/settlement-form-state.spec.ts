@@ -8,9 +8,9 @@ describe('SettlementFormState', () => {
     groupId: 'group1',
     fromUid: 'u1',
     toUid: 'u2',
-    amount: 50,
     fromName: 'Diego',
     toName: 'Ana',
+    preselect: { mode: 'empty' as const },
   };
 
   beforeEach(() => {

@@ -58,7 +58,12 @@
           <div class="mfx-movements__item-info">
             <span class="mfx-movements__icon-badge">{{ categoryIcon(movement.categoryId) }}</span>
             <div class="mfx-movements__item-text">
-              <span class="mfx-movements__category-name">{{ categoryName(movement.categoryId) }}</span>
+              <span class="mfx-movements__category-name">
+                {{ categoryName(movement.categoryId) }}
+                @if (isVoidedAbono(movement)) {
+                  <span class="mfx-movements__voided-tag">· Abono anulado</span>
+                }
+              </span>
               @if (movement.groupName) {
                 <span class="mfx-movements__item-tag">
                   {{ movement.groupIsShared ? 'Compartido · ' : '' }}{{ movement.groupName }} · {{ formatDate(movement.date) }}

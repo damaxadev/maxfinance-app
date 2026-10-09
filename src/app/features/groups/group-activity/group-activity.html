@@ -5,9 +5,8 @@
 } @else {
   @for (entry of entries(); track entry.id) {
     <div
-      class="mfx-group-activity__row"
-      [class.mfx-group-activity__row--clickable]="entry.kind === 'movement'"
-      (click)="entry.kind === 'movement' && openMovementOrGroupDetail(entry.movement)"
+      class="mfx-group-activity__row mfx-group-activity__row--clickable"
+      (click)="entry.kind === 'movement' ? openMovementOrGroupDetail(entry.movement) : openSettlementDetail(entry.settlement)"
     >
       @if (entry.kind === 'movement') {
         <div class="mfx-group-activity__row-main">
@@ -41,6 +40,33 @@
                   >›</span
                 >
               </button>
+            } @else if (isMultiDebtor(entry.movement)) {
+              <button
+                type="button"
+                class="mfx-group-activity__installments-toggle"
+                (click)="$event.stopPropagation(); toggleInstallments(entry.movement.id)"
+              >
+                @if (allDebtorsPaid(entry.movement)) {
+                  <span class="mfx-group-activity__status-badge mfx-group-activity__status-badge--paid">Pagada</span>
+                } @else if (anyDebtorPartial(entry.movement)) {
+                  <span class="mfx-group-activity__status-badge mfx-group-activity__status-badge--partial">Parcial</span>
+                } @else if (paidDebtorsCount(entry.movement) > 0) {
+                  {{ paidDebtorsCount(entry.movement) }} de {{ debtsFor(entry.movement.id).length }} pagaron
+                }
+                <span
+                  class="mfx-group-activity__installments-chevron"
+                  [class.mfx-group-activity__installments-chevron--expanded]="isInstallmentsExpanded(entry.movement.id)"
+                  >›</span
+                >
+              </button>
+            } @else if (singleDebt(entry.movement); as debt) {
+              @if (debt.status === 'pagada') {
+                <span class="mfx-group-activity__status-badge mfx-group-activity__status-badge--paid">Pagada</span>
+              } @else if (debt.status === 'parcial') {
+                <span class="mfx-group-activity__status-badge mfx-group-activity__status-badge--partial">
+                  Parcial · resta {{ debt.remaining | mfxCurrency }}
+                </span>
+              }
             }
           </div>
           <mfx-animated-number class="mfx-group-activity__amount" [value]="entry.movement.amount" />
@@ -54,6 +80,7 @@
                 [index]="cuota.index"
                 [size]="'compact'"
                 [interactive]="canPayInstallment(entry.movement)"
+                [debt]="debtForInstallment(entry.movement, cuota.index)"
                 (pay)="payInstallment(entry.movement, cuota.installment, cuota.index)"
               />
             }
@@ -63,9 +90,35 @@
               </span>
             }
           </div>
+        } @else if (isMultiDebtor(entry.movement) && isInstallmentsExpanded(entry.movement.id)) {
+          <div class="mfx-group-activity__installments">
+            @for (debt of debtsFor(entry.movement.id); track debt.debtorUid) {
+              <div class="mfx-group-activity__debtor-row">
+                <mfx-avatar
+                  [photoUrl]="memberProfile(debt.debtorUid).photoURL"
+                  [displayName]="memberProfile(debt.debtorUid).displayName"
+                  [size]="22"
+                />
+                <span>
+                  <strong>{{ memberProfile(debt.debtorUid).displayName || 'Alguien' }}</strong>:
+                  @if (debt.status === 'pagada') {
+                    pagada ✓
+                  } @else if (debt.status === 'parcial') {
+                    parcial, pagó {{ debt.paid | mfxCurrency }} de {{ debt.total | mfxCurrency }}, resta
+                    {{ debt.remaining | mfxCurrency }}
+                  } @else {
+                    pendiente
+                  }
+                </span>
+              </div>
+            }
+          </div>
         }
       } @else {
-        <div class="mfx-group-activity__row-main">
+        <div
+          class="mfx-group-activity__row-main"
+          [class.mfx-group-activity__row-main--voided]="isVoidedSettlement(entry.settlement)"
+        >
           <div class="mfx-group-activity__people">
             <mfx-avatar
               [photoUrl]="memberProfile(entry.settlement.fromUid).photoURL"
@@ -81,54 +134,36 @@
           <div class="mfx-group-activity__info">
             <span>
               <strong>{{ memberProfile(entry.settlement.fromUid).displayName || 'Alguien' }}</strong>
-              le pagó a
+              le abonó a
               <strong>{{ memberProfile(entry.settlement.toUid).displayName || 'alguien' }}</strong>
+              @if (isVoidedSettlement(entry.settlement)) {
+                · Anulado
+              }
             </span>
             <span class="mfx-group-activity__date">
               {{ formatDate(entry.settlement.date) }}
               @if (showGroupTag()) {
                 · {{ groupName(entry.settlement.groupId) }}
               }
+              @if (isLegacySettlement(entry.settlement)) {
+                · asignación automática
+              }
+              @if (registeredByOther(entry.settlement)) {
+                · Registrado por {{ registeredByName(entry.settlement) }}
+              }
             </span>
 
-            @if (linkingSettlementId() === entry.settlement.id) {
-              <div class="mfx-group-activity__link-form">
-                <select [value]="linkAccountId()" (change)="linkAccountId.set($any($event.target).value)">
-                  <option value="">Elige una cuenta</option>
-                  @for (account of accounts(); track account.id) {
-                    <option [value]="account.id">{{ account.name }}</option>
-                  }
-                </select>
-                <button
-                  type="button"
-                  class="mfx-btn-primary"
-                  [disabled]="linking()"
-                  (click)="confirmLinking(entry.settlement)"
-                >
-                  {{ linking() ? 'Guardando…' : 'Confirmar' }}
-                </button>
-                <button type="button" class="mfx-group-activity__cancel" [disabled]="linking()" (click)="cancelLinking()">
-                  Cancelar
-                </button>
-                @if (linkError()) {
-                  <p class="mfx-form__error" role="alert">{{ linkError() }}</p>
-                }
-              </div>
-            } @else if (alreadyLinked(entry.settlement)) {
-              <span class="mfx-group-activity__linked">✓ Ya registraste esto</span>
-            } @else if (linkLabel(entry.settlement); as label) {
-              <button type="button" class="mfx-group-activity__link-btn" (click)="startLinking(entry.settlement.id)">
-                {{ label }}
-              </button>
+            @if (entry.settlement.note) {
+              <span class="mfx-group-activity__note">{{ entry.settlement.note }}</span>
+            }
+
+            @if (hasAttachment(entry.settlement)) {
+              <span class="mfx-group-activity__attachment-indicator">📎 Tiene comprobante</span>
             }
           </div>
           <mfx-animated-number class="mfx-group-activity__amount" [value]="entry.settlement.amount" />
         </div>
       }
     </div>
-  }
-
-  @if (hasMore()) {
-    <button type="button" class="mfx-section-add" (click)="openFullHistory()">Ver todos ({{ totalCount() }})</button>
   }
 }

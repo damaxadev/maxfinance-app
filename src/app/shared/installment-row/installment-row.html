@@ -12,10 +12,17 @@
 
     @if (isPaid()) {
       <span class="mfx-installment-row__paid-badge">✓ Pagada</span>
-    } @else if (interactive()) {
-      <button type="button" class="mfx-installment-row__pay-btn" (click)="$event.stopPropagation(); pay.emit()">
-        Marcar como pagada
-      </button>
+    } @else {
+      @if (isPartial()) {
+        <span class="mfx-installment-row__partial-badge">
+          Parcial · pagó {{ debt()!.paid | mfxCurrency }} · resta {{ debt()!.remaining | mfxCurrency }}
+        </span>
+      }
+      @if (interactive()) {
+        <button type="button" class="mfx-installment-row__pay-btn" (click)="$event.stopPropagation(); pay.emit()">
+          Marcar como pagada
+        </button>
+      }
     }
   </div>
 } @else {
@@ -36,10 +43,17 @@
 
       @if (isPaid()) {
         <span class="mfx-installment-row__paid-badge">✓ Pagada</span>
-      } @else if (interactive()) {
-        <button type="button" class="mfx-installment-row__pay-btn" (click)="$event.stopPropagation(); pay.emit()">
-          Marcar como pagada
-        </button>
+      } @else {
+        @if (isPartial()) {
+          <span class="mfx-installment-row__partial-badge">
+            Parcial · pagó {{ debt()!.paid | mfxCurrency }} · resta {{ debt()!.remaining | mfxCurrency }}
+          </span>
+        }
+        @if (interactive()) {
+          <button type="button" class="mfx-installment-row__pay-btn" (click)="$event.stopPropagation(); pay.emit()">
+            Marcar como pagada
+          </button>
+        }
       }
     </div>
   </div>

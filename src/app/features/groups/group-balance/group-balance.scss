@@ -20,6 +20,46 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  cursor: pointer;
+}
+
+.mfx-group-balance__chevron {
+  font-size: 0.875rem;
+  opacity: 0.5;
+  transition: transform 0.15s ease;
+
+  &--expanded {
+    transform: rotate(90deg);
+  }
+}
+
+.mfx-group-balance__breakdown {
+  margin-left: calc(28px + 0.5rem);
+  padding: 0.5rem 0.625rem;
+  border-radius: 10px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.mfx-group-balance__breakdown-movement {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+
+  > span:first-child {
+    font-weight: 600;
+  }
+}
+
+.mfx-group-balance__breakdown-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 0.75rem;
+  opacity: 0.85;
 }
 
 .mfx-group-balance__names {
@@ -37,4 +77,22 @@
 .mfx-group-balance__amount {
   font-weight: 700;
   color: var(--danger);
+}
+
+.mfx-group-balance__buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mfx-group-balance__abonar-btn {
+  border: 1px solid var(--mfx-hairline);
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 0.4rem 0.75rem;
+  cursor: pointer;
 }

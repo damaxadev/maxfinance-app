@@ -1,12 +1,12 @@
-import { Component, computed, effect, inject, input, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { switchMap } from 'rxjs';
 import type { Timestamp } from 'firebase/firestore';
 
-import { Accounts } from '../../../core/accounts/accounts';
+import { AbonoDetailState } from '../../../core/abono-detail-state/abono-detail-state';
 import { Auth } from '../../../core/auth/auth';
 import { Categories } from '../../../core/categories/categories';
-import { GroupActivityFullState } from '../../../core/group-activity-full-state/group-activity-full-state';
+import { type Debt, debtsByMovement } from '../../../core/debts/debts';
 import { GroupDetailState } from '../../../core/group-detail-state/group-detail-state';
 import { GroupsService, type GroupMemberProfile } from '../../../core/groups/groups';
 import { MovementsService, type SharedMovementWithId } from '../../../core/movements/movements';
@@ -16,6 +16,7 @@ import { SharedExpenseFormState } from '../../../core/shared-expense-form-state/
 import type { Installment } from '../../../models/movement.model';
 import { AnimatedNumber } from '../../../shared/animated-number/animated-number';
 import { Avatar } from '../../../shared/avatar/avatar';
+import { MfxCurrencyPipe } from '../../../shared/currency/currency.pipe';
 import { InstallmentRow } from '../../../shared/installment-row/installment-row';
 
 const UNKNOWN_MEMBER: GroupMemberProfile = { uid: '', displayName: 'Alguien', email: '', photoURL: '' };
@@ -29,23 +30,43 @@ type ActivityEntry =
   | { kind: 'movement'; id: string; date: Timestamp; movement: SharedMovementWithId }
   | { kind: 'settlement'; id: string; date: Timestamp; settlement: SettlementWithId };
 
+// El ORDEN del historial es por createdAt (cuándo se registró de verdad),
+// no por `date` (la fecha que el usuario elige y que sigue siendo lo que
+// se MUESTRA) — ver DATABASE.md, "Balance de grupo y abonos". `createdAt
+// === null` es un serverTimestamp() todavía sin resolver en el snapshot
+// local (recién creado) — se trata como "ahora" para que no salte al
+// fondo. `createdAt === undefined` es un doc de antes de este campo — cae
+// a su `date`.
+function orderMillis(entry: { date: Timestamp; createdAt?: Timestamp | null }): number {
+  if (entry.createdAt === null) {
+    return Date.now();
+  }
+  if (entry.createdAt === undefined) {
+    return entry.date.toMillis();
+  }
+  return entry.createdAt.toMillis();
+}
+
+function entryDoc(entry: ActivityEntry): { date: Timestamp; createdAt?: Timestamp | null } {
+  return entry.kind === 'movement' ? entry.movement : entry.settlement;
+}
+
 @Component({
   selector: 'mfx-group-activity',
-  imports: [AnimatedNumber, Avatar, InstallmentRow],
+  imports: [AnimatedNumber, Avatar, InstallmentRow, MfxCurrencyPipe],
   templateUrl: './group-activity.html',
   styleUrl: './group-activity.scss',
 })
 export class GroupActivity {
   private readonly movementsService = inject(MovementsService);
   private readonly settlementsService = inject(SettlementsService);
-  private readonly accountsService = inject(Accounts);
   private readonly categoriesService = inject(Categories);
   private readonly groupsService = inject(GroupsService);
   private readonly auth = inject(Auth);
-  private readonly groupActivityFullState = inject(GroupActivityFullState);
   private readonly groupDetailState = inject(GroupDetailState);
   private readonly sharedExpenseFormState = inject(SharedExpenseFormState);
   private readonly settlementFormState = inject(SettlementFormState);
+  private readonly abonoDetailState = inject(AbonoDetailState);
 
   // Uno o varios grupos a la vez — GroupDetail pasa un solo id (sin
   // etiqueta de grupo, ya se sabe cuál es); Inicio pasa todos los grupos
@@ -53,8 +74,9 @@ export class GroupActivity {
   // que sí necesita la etiqueta para distinguir de dónde viene cada entrada.
   readonly groupIds = input.required<string[]>();
   readonly members = input.required<GroupMemberProfile[]>();
-  // null == sin límite (usado por la vista "ver todos"); un número muestra
-  // solo los primeros N y activa el conteo total para el link "Ver todos".
+  // null == sin límite (GroupDetail: el historial completo, de una, sin
+  // paginar); un número muestra solo los primeros N (Inicio, "Gastos
+  // compartidos recientes" — un resumen, nunca el historial completo).
   readonly limit = input<number | null>(RECENT_LIMIT);
   // false (default, uso dentro de GroupDetail): tocar una fila abre el
   // gasto para editarlo — tiene sentido, ya estás viendo el detalle de ESE
@@ -68,7 +90,6 @@ export class GroupActivity {
   readonly showGroupTag = computed(() => this.groupIds().length > 1);
 
   private readonly currentUid = computed(() => this.auth.currentUser?.uid ?? null);
-  readonly accounts = toSignal(this.accountsService.accounts$, { initialValue: [] });
   private readonly categories = toSignal(this.categoriesService.categories$, { initialValue: [] });
   private readonly categoriesById = computed(() => new Map(this.categories().map((c) => [c.id, c])));
   private readonly groups = toSignal(this.groupsService.groups$, { initialValue: [] });
@@ -83,59 +104,24 @@ export class GroupActivity {
     { initialValue: [] as SettlementWithId[] }
   );
 
+  // Deudas derivadas por gasto — fuente de verdad de TODAS las marcas de
+  // estado de esta vista (gastos, cuotas, resumen por persona). Nunca lee
+  // installments[].status ni splits[].settled directo — ver DATABASE.md,
+  // "Balance de grupo y abonos".
+  private readonly debtsByMovementId = computed(() => debtsByMovement(this.movements(), this.settlements()));
+
+  debtsFor(movementId: string): Debt[] {
+    return this.debtsByMovementId().get(movementId) ?? [];
+  }
+
   readonly entries = computed<ActivityEntry[]>(() => {
     const all: ActivityEntry[] = [
       ...this.movements().map((m) => ({ kind: 'movement' as const, id: m.id, date: m.date, movement: m })),
       ...this.settlements().map((s) => ({ kind: 'settlement' as const, id: s.id, date: s.date, settlement: s })),
-    ].sort((a, b) => b.date.toMillis() - a.date.toMillis());
+    ].sort((a, b) => orderMillis(entryDoc(b)) - orderMillis(entryDoc(a)));
     const max = this.limit();
     return max === null ? all : all.slice(0, max);
   });
-
-  readonly totalCount = signal<number | null>(null);
-  readonly hasMore = computed(() => {
-    const max = this.limit();
-    const total = this.totalCount();
-    // "Ver todos" abre el historial de UN grupo (GroupActivityFullState es
-    // groupId-scoped) — no tiene un destino sensible cuando esta lista
-    // combina varios grupos a la vez, así que se oculta en ese caso.
-    return max !== null && total !== null && total > max && this.groupIds().length === 1;
-  });
-
-  readonly linkedSettlementIds = signal<ReadonlySet<string>>(new Set());
-  readonly linkingSettlementId = signal<string | null>(null);
-  readonly linkAccountId = signal('');
-  readonly linking = signal(false);
-  readonly linkError = signal<string | null>(null);
-
-  constructor() {
-    // El conteo total no es reactivo (getCountFromServer no es un listener en
-    // vivo) — se recalcula solo cuando cambian los grupos, es suficiente para
-    // decidir si mostrar "Ver todos".
-    effect(() => {
-      const groupIds = this.groupIds();
-      if (this.limit() === null) {
-        return;
-      }
-      this.loadTotalCount(groupIds);
-    });
-
-    effect(() => {
-      const settlements = this.settlements();
-      const uid = this.currentUid();
-      if (!uid || settlements.length === 0) {
-        this.linkedSettlementIds.set(new Set());
-        return;
-      }
-      this.settlementsService
-        .findLinkedMovementSettlementIds(
-          settlements.map((s) => s.id),
-          uid
-        )
-        .then((ids) => this.linkedSettlementIds.set(ids))
-        .catch((error) => console.error('Error al verificar movimientos vinculados', error));
-    });
-  }
 
   memberProfile(uid: string): GroupMemberProfile {
     return this.members().find((member) => member.uid === uid) ?? { ...UNKNOWN_MEMBER, uid };
@@ -205,7 +191,14 @@ export class GroupActivity {
     if (all.length <= MAX_VISIBLE_INSTALLMENTS) {
       return all;
     }
-    const firstPendingIndex = all.findIndex((entry) => entry.installment.status === 'pending');
+    // Prioriza por el balance real (computeDebts), no por installment.status
+    // — una cuota ya cubierta por un abono que no pasó por "Marcar como
+    // pagada" (p. ej. "Saldada") no debe seguir contando como la próxima
+    // pendiente a mostrar.
+    const debts = this.debtsFor(movement.id);
+    const firstPendingIndex = all.findIndex(
+      (entry) => (debts.find((debt) => debt.installmentIndex === entry.index)?.status ?? 'pendiente') !== 'pagada'
+    );
     const start = firstPendingIndex === -1 ? 0 : firstPendingIndex;
     return all.slice(start, start + MAX_VISIBLE_INSTALLMENTS);
   }
@@ -218,8 +211,49 @@ export class GroupActivity {
     return movement.installments?.length ?? 0;
   }
 
+  // Calculado desde el balance real (computeDebts), NUNCA desde
+  // installments[].status — ver DATABASE.md, "Balance de grupo y abonos".
   paidInstallmentsCount(movement: SharedMovementWithId): number {
-    return movement.installments?.filter((installment) => installment.status === 'paid').length ?? 0;
+    return this.debtsFor(movement.id).filter((debt) => debt.status === 'pagada').length;
+  }
+
+  // La deuda real de ESTA cuota puntual — se la pasa a <mfx-installment-row>
+  // como [debt] para que calcule su estado real (pendiente/parcial/pagada)
+  // en vez de leer installment.status.
+  debtForInstallment(movement: SharedMovementWithId, index: number): Debt | null {
+    return this.debtsFor(movement.id).find((debt) => debt.installmentIndex === index) ?? null;
+  }
+
+  // --- Marcas para un gasto SIN cuotas (ver DATABASE.md) ---
+
+  // 2 personas (un solo deudor además de quien pagó): la deuda única de
+  // ese gasto, para una marca simple en línea ("Parcial · resta $X").
+  singleDebt(movement: SharedMovementWithId): Debt | null {
+    if (movement.installments?.length) {
+      return null;
+    }
+    const debts = this.debtsFor(movement.id);
+    return debts.length === 1 ? debts[0] : null;
+  }
+
+  // 3+ personas (más de un deudor, sin cuotas): la marca de la lista es un
+  // resumen; al expandir (mismo toggle que las cuotas, nunca coexisten en
+  // el mismo gasto) se ve el estado de cada persona.
+  isMultiDebtor(movement: SharedMovementWithId): boolean {
+    return !movement.installments?.length && this.debtsFor(movement.id).length > 1;
+  }
+
+  allDebtorsPaid(movement: SharedMovementWithId): boolean {
+    const debts = this.debtsFor(movement.id);
+    return debts.length > 0 && debts.every((debt) => debt.status === 'pagada');
+  }
+
+  anyDebtorPartial(movement: SharedMovementWithId): boolean {
+    return this.debtsFor(movement.id).some((debt) => debt.status === 'parcial');
+  }
+
+  paidDebtorsCount(movement: SharedMovementWithId): number {
+    return this.debtsFor(movement.id).filter((debt) => debt.status === 'pagada').length;
   }
 
   // false (default, GroupDetail sin cambios): cuotas expandidas de entrada,
@@ -249,18 +283,21 @@ export class GroupActivity {
     this.toggledInstallmentIds.set(next);
   }
 
-  // Cualquiera de las dos partes de la deuda (o el admin) puede marcar una
-  // cuota como pagada — mismo criterio que GroupBalance.canSettle() para
-  // saldar la deuda completa.
+  // Solo los dos de la pareja ven el botón — ni el admin (ver DATABASE.md,
+  // "Balance de grupo y abonos": el modal de abono es de la pareja, no un
+  // superpoder de administración).
   canPayInstallment(movement: SharedMovementWithId): boolean {
     const uid = this.currentUid();
     if (!uid) {
       return false;
     }
-    return uid === movement.paidBy || uid === this.debtorUid(movement) || !!this.auth.isAdmin;
+    return uid === movement.paidBy || uid === this.debtorUid(movement);
   }
 
-  payInstallment(movement: SharedMovementWithId, installment: Installment, index: number): void {
+  // Abre el modal de abono con esa cuota preseleccionada por su remaining
+  // completo (no por installment.amount — puede ya estar parcialmente
+  // pagada) — ver AbonoForm.
+  payInstallment(movement: SharedMovementWithId, _installment: Installment, index: number): void {
     const debtorUid = this.debtorUid(movement);
     if (!debtorUid) {
       return;
@@ -269,89 +306,43 @@ export class GroupActivity {
       groupId: movement.groupId,
       fromUid: debtorUid,
       toUid: movement.paidBy,
-      amount: installment.amount,
       fromName: this.memberProfile(debtorUid).displayName || 'Alguien',
       toName: this.memberProfile(movement.paidBy).displayName || 'alguien',
-      installmentRef: {
-        movementId: movement.id,
-        installmentIndex: index,
-        totalInstallments: movement.installments?.length ?? 0,
-      },
+      preselect: { mode: 'installment', movementId: movement.id, installmentIndex: index },
     });
   }
 
-  // "Registrar como gasto" si el usuario actual pagó (fromUid), "...ingreso"
-  // si lo recibió (toUid) — null si no es parte de este settlement, y en ese
-  // caso no hay botón que mostrar en absoluto.
-  linkLabel(settlement: SettlementWithId): string | null {
-    const uid = this.currentUid();
-    if (!uid) {
-      return null;
-    }
-    if (uid === settlement.fromUid) {
-      return 'Registrar como gasto';
-    }
-    if (uid === settlement.toUid) {
-      return 'Registrar como ingreso';
-    }
-    return null;
+  // --- Fila de abono (ver DATABASE.md, "Balance de grupo y abonos") ---
+
+  // Legacy: de antes de que existiera `allocations` — no sabe a qué
+  // deuda(s) aplica, se auto-asigna a las más antiguas al leer (ver
+  // computeDebts). Nada que desplegar para este caso: solo la etiqueta.
+  isLegacySettlement(settlement: SettlementWithId): boolean {
+    return !settlement.allocations?.length;
   }
 
-  alreadyLinked(settlement: SettlementWithId): boolean {
-    return this.linkedSettlementIds().has(settlement.id);
+  isVoidedSettlement(settlement: SettlementWithId): boolean {
+    return settlement.status === 'voided';
   }
 
-  startLinking(settlementId: string): void {
-    this.linkingSettlementId.set(settlementId);
-    this.linkAccountId.set('');
-    this.linkError.set(null);
+  // Quien lo registró (createdBy) puede ser cualquiera de los dos — si no
+  // fue quien pagó (fromUid), se aclara.
+  registeredByOther(settlement: SettlementWithId): boolean {
+    return !!settlement.createdBy && settlement.createdBy !== settlement.fromUid;
   }
 
-  cancelLinking(): void {
-    this.linkingSettlementId.set(null);
+  registeredByName(settlement: SettlementWithId): string {
+    return this.memberProfile(settlement.createdBy ?? '').displayName || 'alguien';
   }
 
-  async confirmLinking(settlement: SettlementWithId): Promise<void> {
-    const accountId = this.linkAccountId();
-    if (!accountId) {
-      this.linkError.set('Selecciona una cuenta.');
-      return;
-    }
-
-    this.linking.set(true);
-    this.linkError.set(null);
-
-    try {
-      await this.settlementsService.linkPersonalMovement(settlement, accountId);
-      this.linkedSettlementIds.set(new Set([...this.linkedSettlementIds(), settlement.id]));
-      this.linkingSettlementId.set(null);
-    } catch (error) {
-      console.error('Error al registrar el movimiento vinculado', error);
-      this.linkError.set('No pudimos registrar el movimiento. Intenta de nuevo.');
-    } finally {
-      this.linking.set(false);
-    }
+  // Tocar una fila de abono abre su detalle completo (ver AbonoDetail) —
+  // ahí vive el desglose de allocations, el adjunto, anular, editar nota y
+  // "Registrar como gasto/ingreso". Esta fila solo muestra un resumen.
+  openSettlementDetail(settlement: SettlementWithId): void {
+    this.abonoDetailState.open(settlement);
   }
 
-  openFullHistory(): void {
-    const [onlyGroupId] = this.groupIds();
-    if (this.groupIds().length !== 1 || !onlyGroupId) {
-      return;
-    }
-    this.groupActivityFullState.open(onlyGroupId);
-  }
-
-  private async loadTotalCount(groupIds: string[]): Promise<void> {
-    try {
-      const counts = await Promise.all(
-        groupIds.flatMap((groupId) => [
-          this.movementsService.countGroupMovements(groupId),
-          this.settlementsService.countGroupSettlements(groupId),
-        ])
-      );
-      this.totalCount.set(counts.reduce((sum, count) => sum + count, 0));
-    } catch (error) {
-      console.error('Error al contar la actividad del grupo', error);
-    }
+  hasAttachment(settlement: SettlementWithId): boolean {
+    return !!settlement.attachmentPath;
   }
 }

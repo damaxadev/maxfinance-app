@@ -1,0 +1,173 @@
+:host {
+  display: block;
+}
+
+.mfx-abono-form__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.mfx-abono-form__empty {
+  margin: 0;
+  opacity: 0.7;
+  font-size: 0.875rem;
+}
+
+.mfx-abono-form__movement {
+  border: 1px solid var(--mfx-hairline-subtle);
+  border-radius: 12px;
+  padding: 0.625rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+
+  &--paid {
+    opacity: 0.6;
+  }
+}
+
+.mfx-abono-form__movement-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.mfx-abono-form__movement-date {
+  font-weight: 400;
+  opacity: 0.6;
+  font-size: 0.75rem;
+}
+
+.mfx-abono-form__row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--mfx-hairline-subtle);
+
+  &:first-of-type {
+    border-top: none;
+  }
+
+  &--selected {
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 0.5rem;
+  }
+
+  &--paid {
+    padding: 0.25rem 0;
+    font-size: 0.8125rem;
+    opacity: 0.85;
+  }
+}
+
+// mfx-checkbox (ver shared/checkbox) reemplaza al <input type="checkbox">
+// nativo — es display:block, no inline-flex (el default del componente),
+// para que ocupe todo el ancho de la fila como lo hacía el <label> de antes.
+.mfx-abono-form__row-check {
+  display: block;
+  width: 100%;
+  font-size: 0.8125rem;
+  text-align: left;
+}
+
+.mfx-abono-form__row-amount {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-left: 1.5rem;
+
+  input {
+    flex: 1;
+  }
+}
+
+// Acción secundaria (texto verde, ver DESIGN.md) con área de toque de
+// sobra — alineada con el input gracias al align-items:center del padre.
+.mfx-abono-form__full-btn {
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  padding: 0.625rem 0.5rem;
+}
+
+.mfx-abono-form__row-preview {
+  margin: 0;
+  padding-left: 1.5rem;
+  font-size: 0.75rem;
+
+  // Mismo criterio de color que el resto de la app (ver group-activity.scss/
+  // abono-detail.scss, mfx-*__status-badge): pagada = primary, parcial = accent.
+  &--paid {
+    color: var(--primary);
+    opacity: 0.85;
+  }
+
+  &--partial {
+    color: var(--accent);
+    opacity: 0.85;
+  }
+}
+
+.mfx-abono-form__toggle-paid {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  opacity: 0.6;
+  font-family: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.mfx-abono-form__total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  font-size: 0.9375rem;
+
+  strong {
+    font-size: 1.0625rem;
+  }
+}
+
+// Discreto a propósito (ver DATABASE.md): "Distribuir automático" deja de
+// ser la forma principal de armar un abono, pasa a ser un atajo secundario.
+// mfx-checkbox ya trae su propio font-size/color — acá solo se ajusta la
+// opacidad para que siga leyéndose secundario, igual que antes.
+.mfx-abono-form__distribute-toggle {
+  opacity: 0.7;
+}
+
+.mfx-abono-form__distribute {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.375rem;
+
+  input {
+    flex: 1;
+  }
+}
+
+.mfx-abono-form__preview {
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.8125rem;
+
+  p {
+    margin: 0;
+  }
+}

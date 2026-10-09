@@ -11,6 +11,7 @@ import { GroupsService } from '../../../core/groups/groups';
 import { MovementsService } from '../../../core/movements/movements';
 import { MovementFormState } from '../../../core/movement-form-state/movement-form-state';
 import { AccountFormState } from '../../../core/account-form-state/account-form-state';
+import { SettlementsService } from '../../../core/settlements/settlements';
 
 const fakeAccounts = [
   { id: 'acc1', uid: 'u1', name: 'Efectivo', type: 'efectivo' as const, balance: 100, currency: 'COP' },
@@ -21,6 +22,10 @@ const fakeCategories = [
   { id: 'cat2', uid: null, name: 'Salario', icon: '💼', type: 'income' as const },
 ];
 const fakeGroups = [{ id: 'group1', name: 'Nuevo grupo', members: ['u1', 'u2'], createdBy: 'u1', createdAt: {} as never }];
+// Movements inyecta esto solo para el marcador "Abono anulado" (ver
+// isVoidedAbono()) — vacío por defecto (ningún movimiento tiene
+// settlementId en los fixtures base), salvo que un describe lo sobreescriba.
+const fakeSettlementsService = { settlementsStatusByIds$: () => of(new Map<string, string | undefined>()) };
 
 function ts(date: string) {
   return { toDate: () => new Date(date), toMillis: () => new Date(date).getTime() };
@@ -79,6 +84,7 @@ describe('Movements', () => {
         { provide: Categories, useValue: { categories$: of(fakeCategories) } },
         { provide: GroupsService, useValue: { groups$: of([]) } },
         { provide: MovementsService, useValue: { personalMovements$: of(fakeMovements), sharedMovementsForGroups$: sharedMovementsForGroups } },
+        { provide: SettlementsService, useValue: fakeSettlementsService },
       ],
     }).compileComponents();
 
@@ -164,6 +170,7 @@ describe('Movements with shared expenses', () => {
           provide: MovementsService,
           useValue: { personalMovements$: of(fakeMovements), sharedMovementsForGroups$: () => of(shared) },
         },
+        { provide: SettlementsService, useValue: fakeSettlementsService },
       ],
     }).compileComponents();
 
@@ -225,6 +232,7 @@ describe('Movements with a personal-group expense (Fase 9)', () => {
           provide: MovementsService,
           useValue: { personalMovements$: of([]), sharedMovementsForGroups$: () => of(shared) },
         },
+        { provide: SettlementsService, useValue: fakeSettlementsService },
       ],
     }).compileComponents();
 
@@ -241,5 +249,61 @@ describe('Movements with a personal-group expense (Fase 9)', () => {
     const tag = fixture.nativeElement.querySelector('.mfx-movements__item-tag');
     expect(tag.textContent).toContain('Ahorros');
     expect(tag.textContent).not.toContain('Compartido');
+  });
+});
+
+// Un movimiento personal con settlementId viene de "Registrar como gasto/
+// ingreso" (ver SettlementsService.linkPersonalMovement) — si ese abono se
+// anula DESPUÉS, el movimiento sigue existiendo pero se marca "Abono
+// anulado" (ver movements.ts, isVoidedAbono()) para no leerse como un
+// gasto/ingreso legítimo.
+describe('Movements with a movement linked to a voided abono', () => {
+  let component: Movements;
+  let fixture: ComponentFixture<Movements>;
+  let settlementsStatusByIds: ReturnType<typeof vi.fn>;
+
+  const linkedMovements = [
+    movement({ id: 'mov-linked', settlementId: 's1', date: ts('2026-02-10') }),
+    movement({ id: 'mov-unlinked', date: ts('2026-02-05') }),
+  ];
+
+  beforeEach(async () => {
+    settlementsStatusByIds = vi.fn(() => of(new Map([['s1', 'voided']])));
+
+    await TestBed.configureTestingModule({
+      imports: [Movements],
+      providers: [
+        provideNoopAnimations(),
+        { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
+        { provide: Categories, useValue: { categories$: of(fakeCategories) } },
+        { provide: GroupsService, useValue: { groups$: of([]) } },
+        { provide: MovementsService, useValue: { personalMovements$: of(linkedMovements), sharedMovementsForGroups$: () => of([]) } },
+        { provide: SettlementsService, useValue: { settlementsStatusByIds$: settlementsStatusByIds } },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(Movements);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  it('queries settlement status only for the settlementIds actually present', () => {
+    expect(settlementsStatusByIds).toHaveBeenCalledWith(['s1']);
+  });
+
+  it('isVoidedAbono(): true for the linked movement whose abono is voided, false otherwise', () => {
+    const linked = component.filteredMovements().find((m) => m.id === 'mov-linked')!;
+    const unlinked = component.filteredMovements().find((m) => m.id === 'mov-unlinked')!;
+
+    expect(component.isVoidedAbono(linked)).toBe(true);
+    expect(component.isVoidedAbono(unlinked)).toBe(false);
+  });
+
+  it('shows the "Abono anulado" tag only on the affected row', () => {
+    const rows: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('.mfx-movements__category-name'));
+    const linkedRow = rows.find((row) => row.textContent?.includes('Abono anulado'));
+
+    expect(linkedRow).toBeTruthy();
+    expect(rows.filter((row) => row.textContent?.includes('Abono anulado'))).toHaveLength(1);
   });
 });

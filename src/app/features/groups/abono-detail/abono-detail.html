@@ -1,0 +1,171 @@
+@if (settlement(); as s) {
+  <div class="mfx-abono-detail__header">
+    <div class="mfx-abono-detail__people">
+      <mfx-avatar [photoUrl]="memberProfile(s.fromUid).photoURL" [displayName]="memberProfile(s.fromUid).displayName" [size]="36" />
+      <span class="mfx-abono-detail__arrow">→</span>
+      <mfx-avatar [photoUrl]="memberProfile(s.toUid).photoURL" [displayName]="memberProfile(s.toUid).displayName" [size]="36" />
+    </div>
+    <p>
+      <strong>{{ memberProfile(s.fromUid).displayName || 'Alguien' }}</strong>
+      le abonó a
+      <strong>{{ memberProfile(s.toUid).displayName || 'alguien' }}</strong>
+    </p>
+    <p class="mfx-abono-detail__amount" [class.mfx-abono-detail__amount--voided]="isVoided()">
+      {{ s.amount | mfxCurrency }}
+    </p>
+    <p class="mfx-abono-detail__date">{{ formatDate(s.date) }}</p>
+    @if (createdAtLabel()) {
+      <p class="mfx-abono-detail__meta">{{ createdAtLabel() }}</p>
+    }
+    @if (modeLabel()) {
+      <p class="mfx-abono-detail__meta">Modo: {{ modeLabel() }}</p>
+    }
+  </div>
+
+  <div class="mfx-section-header">
+    <h4>Estado</h4>
+  </div>
+  @if (isVoided()) {
+    <p class="mfx-abono-detail__voided-notice">
+      Anulado por {{ memberProfile(s.voidedBy ?? '').displayName || 'alguien' }}
+      @if (s.voidedAt) {
+        el {{ formatDateTime(s.voidedAt) }}
+      }
+      — Motivo: {{ s.voidReason }}
+    </p>
+  } @else {
+    <p>Activo.</p>
+  }
+
+  <div class="mfx-section-header">
+    <h4>Nota</h4>
+  </div>
+  @if (isParty() && isActive()) {
+    <label class="mfx-form__field">
+      <textarea [ngModel]="noteDraft()" (ngModelChange)="noteDraft.set($event)" placeholder="Opcional"></textarea>
+    </label>
+    @if (noteChanged()) {
+      <div class="mfx-form__actions">
+        <button type="button" class="mfx-btn-primary" [disabled]="savingNote()" (click)="saveNote()">
+          {{ savingNote() ? 'Guardando…' : 'Guardar nota' }}
+        </button>
+      </div>
+    }
+    @if (noteError()) {
+      <p class="mfx-form__error" role="alert">{{ noteError() }}</p>
+    }
+  } @else if (s.note) {
+    <p class="mfx-abono-detail__note">{{ s.note }}</p>
+  } @else {
+    <p class="mfx-abono-detail__note mfx-abono-detail__note--empty">Sin nota.</p>
+  }
+
+  <div class="mfx-section-header">
+    <h4>A qué aplicó</h4>
+  </div>
+  @if (isLegacy()) {
+    <p class="mfx-abono-detail__legacy-note">
+      Abono de antes de que se guardara el desglose exacto — se repartió automáticamente a las deudas más antiguas
+      entre estas dos personas al calcular el balance.
+    </p>
+  } @else {
+    <div class="mfx-abono-detail__allocations">
+      @for (allocation of s.allocations; track allocation.movementId + (allocation.installmentIndex ?? '')) {
+        <div class="mfx-abono-detail__allocation-row">
+          <span>{{ allocationLabel(allocation) }}</span>
+          <span>{{ allocation.amount | mfxCurrency }}</span>
+          @if (allocationStatus(allocation); as status) {
+            <span
+              class="mfx-abono-detail__status-badge"
+              [class.mfx-abono-detail__status-badge--paid]="status === 'pagada'"
+              [class.mfx-abono-detail__status-badge--partial]="status === 'parcial'"
+            >
+              {{ status }}
+            </span>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  <div class="mfx-section-header">
+    <h4>Comprobante</h4>
+  </div>
+  @if (isParty()) {
+    <mfx-attachment-picker
+      [existingPath]="s.attachmentPath ?? null"
+      [existingContentType]="s.attachmentContentType ?? null"
+      [readOnly]="!isActive() || uploadingAttachment()"
+      [removing]="removingAttachment()"
+      [inviteText]="'Adjunta el comprobante de este abono'"
+      (attachmentReady)="onAttachmentReady($event)"
+      (existingRemoved)="onAttachmentRemoved()"
+    />
+    @if (attachmentError()) {
+      <p class="mfx-form__error" role="alert">{{ attachmentError() }}</p>
+    }
+  } @else if (s.attachmentPath) {
+    <p class="mfx-abono-detail__attachment-indicator">📎 Tiene comprobante</p>
+  } @else {
+    <p class="mfx-abono-detail__note--empty">Sin comprobante.</p>
+  }
+
+  @if (isParty()) {
+    <div class="mfx-section-header">
+      <h4>Acciones</h4>
+    </div>
+
+    @if (isActive() && !linkedAlready() && linkLabel(); as label) {
+      @if (!linkingOpen()) {
+        <button type="button" class="mfx-btn-primary mfx-btn-block" (click)="startLinking()">{{ label }}</button>
+      } @else {
+        <div class="mfx-abono-detail__link-form">
+          <select class="mfx-input" [ngModel]="linkAccountId()" (ngModelChange)="linkAccountId.set($event)">
+            <option value="">Elige una cuenta</option>
+            @for (account of accounts(); track account.id) {
+              <option [value]="account.id">{{ account.name }}</option>
+            }
+          </select>
+          <div class="mfx-form__actions">
+            <button type="button" class="mfx-btn-secondary" [disabled]="linking()" (click)="cancelLinking()">Cancelar</button>
+            <button type="button" class="mfx-btn-primary" [disabled]="linking()" (click)="confirmLinking()">
+              {{ linking() ? 'Guardando…' : 'Confirmar' }}
+            </button>
+          </div>
+          @if (linkError()) {
+            <p class="mfx-form__error" role="alert">{{ linkError() }}</p>
+          }
+        </div>
+      }
+    } @else if (linkedAlready()) {
+      <p class="mfx-abono-detail__linked">Registrado ✓</p>
+    }
+
+    @if (isActive()) {
+      <div class="mfx-abono-detail__danger-zone">
+        @if (!confirmingVoid()) {
+          <button type="button" class="mfx-btn-danger-outline mfx-btn-block" (click)="startVoid()">Anular abono</button>
+        } @else {
+          <div class="mfx-abono-detail__confirm">
+            <p>Anular es definitivo — no se puede deshacer. Para corregirlo, se registra un abono nuevo.</p>
+            <label class="mfx-form__field">
+              Motivo
+              <textarea [ngModel]="voidReason()" (ngModelChange)="voidReason.set($event)" placeholder="¿Por qué se anula?"></textarea>
+            </label>
+            @if (voidError()) {
+              <p class="mfx-form__error" role="alert">{{ voidError() }}</p>
+            }
+            <div class="mfx-form__actions">
+              <button type="button" class="mfx-btn-secondary" [disabled]="voiding()" (click)="cancelVoid()">Cancelar</button>
+              <button type="button" class="mfx-btn-danger-solid" [disabled]="!canConfirmVoid()" (click)="confirmVoid()">
+                {{ voiding() ? 'Anulando…' : 'Sí, anular' }}
+              </button>
+            </div>
+          </div>
+        }
+      </div>
+    }
+  }
+} @else {
+  <p class="mfx-form__error" role="alert">Este abono ya no existe.</p>
+}

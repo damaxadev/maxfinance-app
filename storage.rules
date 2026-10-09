@@ -54,5 +54,39 @@ service firebase.storage {
       allow read: if isGroupMember(goalEntry().groupId);
       allow write, delete: if isOwner(goalEntry().uid) || isAdmin();
     }
+
+    // settlements/{settlementId}/attachment — un solo comprobante por
+    // abono (ver DATABASE.md, "Balance de grupo y abonos"). Permisos MÁS
+    // estrictos que movements/goalEntries a propósito: un comprobante de
+    // pago trae datos personales, así que leer queda limitado a las dos
+    // partes del abono (fromUid/toUid) — NO a cualquier miembro del grupo
+    // (el tercero solo ve el indicador "Tiene comprobante" del lado de
+    // Firestore, nunca el archivo). Tampoco movements/goalEntries validan
+    // tipo ni tamaño — acá sí, porque es nuevo: mismo tope que ya aplica
+    // del lado del cliente (MAX_ATTACHMENT_BYTES, ver
+    // attachment-compression.ts) y los mismos dos tipos que acepta el
+    // picker.
+    match /settlements/{settlementId}/attachment {
+      function settlement() {
+        return firestore.get(/databases/(default)/documents/settlements/$(settlementId)).data;
+      }
+      function isSettlementParty() {
+        return isOwner(settlement().fromUid) || isOwner(settlement().toUid);
+      }
+      function isSettlementActive() {
+        return settlement().get('status', 'active') == 'active';
+      }
+
+      allow read: if isSettlementParty();
+
+      allow write: if isSettlementParty() && isSettlementActive() &&
+        request.resource.size < 4 * 1024 * 1024 &&
+        (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
+
+      // Un abono anulado deja su comprobante de solo lectura — solo admin
+      // puede borrarlo (p. ej. corregir un dato real), igual que no se
+      // puede ni reemplazar ni eliminar normalmente una vez anulado.
+      allow delete: if (isSettlementParty() && isSettlementActive()) || isAdmin();
+    }
   }
 }

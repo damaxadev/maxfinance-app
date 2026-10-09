@@ -1,6 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { Firestore, collectionData, getCountFromServer } from '@angular/fire/firestore';
-import { Functions } from '@angular/fire/functions';
+import { Firestore, collectionData } from '@angular/fire/firestore';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { firstValueFrom, of } from 'rxjs';
 import { vi } from 'vitest';
@@ -10,7 +9,7 @@ import { AttachmentsService } from '../attachments/attachments';
 import { MovementsService } from './movements';
 import type { MovementSplit, PersonalMovement, SharedMovement } from '../../models/movement.model';
 
-const { mockBatch, mockCommit, mockCallable, mockHttpsCallable, mockUpdateDoc } = vi.hoisted(() => {
+const { mockBatch, mockCommit, mockUpdateDoc } = vi.hoisted(() => {
   const commit = vi.fn().mockResolvedValue(undefined);
   return {
     mockCommit: commit,
@@ -20,8 +19,6 @@ const { mockBatch, mockCommit, mockCallable, mockHttpsCallable, mockUpdateDoc } 
       delete: vi.fn(),
       commit,
     },
-    mockCallable: vi.fn().mockResolvedValue({ data: { settlementId: 's1' } }),
-    mockHttpsCallable: vi.fn(),
     mockUpdateDoc: vi.fn().mockResolvedValue(undefined),
   };
 });
@@ -46,15 +43,10 @@ vi.mock('@angular/fire/firestore', () => ({
   query: vi.fn((...args: unknown[]) => args),
   where: vi.fn((field: string, op: string, value: unknown) => ({ field, op, value })),
   increment: vi.fn((n: number) => ({ __op: 'increment', value: n })),
+  serverTimestamp: vi.fn(() => ({ __op: 'serverTimestamp' })),
   writeBatch: vi.fn(() => mockBatch),
-  getCountFromServer: vi.fn(),
   updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
   Timestamp: { fromDate: vi.fn((d: Date) => ({ __ts: d.getTime() })) },
-}));
-
-vi.mock('@angular/fire/functions', () => ({
-  Functions: class {},
-  httpsCallable: (...args: unknown[]) => mockHttpsCallable(...args),
 }));
 
 describe('MovementsService', () => {
@@ -68,11 +60,8 @@ describe('MovementsService', () => {
     mockBatch.update.mockClear();
     mockBatch.delete.mockClear();
     mockCommit.mockClear();
-    mockHttpsCallable.mockClear().mockReturnValue(mockCallable);
-    mockCallable.mockClear().mockResolvedValue({ data: { settlementId: 's1' } });
     mockUpdateDoc.mockClear().mockResolvedValue(undefined);
     vi.mocked(collectionData).mockClear().mockReturnValue(of([]));
-    vi.mocked(getCountFromServer).mockClear();
     vi.mocked(FirebaseAuthentication.getCurrentUser).mockReset().mockResolvedValue({ user: null });
     vi.mocked(FirebaseAuthentication.addListener).mockReset().mockResolvedValue({ remove: vi.fn() });
     attachmentUpload = vi.fn().mockResolvedValue(undefined);
@@ -81,7 +70,6 @@ describe('MovementsService', () => {
     TestBed.configureTestingModule({
       providers: [
         { provide: Firestore, useValue: {} },
-        { provide: Functions, useValue: {} },
         {
           provide: Auth,
           useValue: { currentUser$: of(fakeUser), currentUser: fakeUser },
@@ -483,21 +471,6 @@ describe('MovementsService', () => {
     );
   });
 
-  describe('payInstallment()', () => {
-    it('calls the payInstallment Cloud Function with the movement id, installment index, and note', async () => {
-      await service.payInstallment('mov1', 2, 'Cuota 3 de 6');
-
-      expect(mockHttpsCallable).toHaveBeenCalledWith(expect.anything(), 'payInstallment');
-      expect(mockCallable).toHaveBeenCalledWith({ movementId: 'mov1', installmentIndex: 2, note: 'Cuota 3 de 6' });
-    });
-
-    it('translates a thrown error into a plain Error with the server message', async () => {
-      mockCallable.mockRejectedValueOnce(new Error('Esa cuota ya está pagada.'));
-
-      await expect(service.payInstallment('mov1', 0, '')).rejects.toThrow('Esa cuota ya está pagada.');
-    });
-  });
-
   describe('updateShared()', () => {
     const previous: SharedMovement = {
       uid: 'u1',
@@ -662,11 +635,4 @@ describe('MovementsService', () => {
     expect(collectionData).not.toHaveBeenCalled();
   });
 
-  it('countGroupMovements(): reads the aggregation count for the group', async () => {
-    vi.mocked(getCountFromServer).mockResolvedValueOnce({ data: () => ({ count: 7 }) } as never);
-
-    const count = await service.countGroupMovements('group1');
-
-    expect(count).toBe(7);
-  });
 });

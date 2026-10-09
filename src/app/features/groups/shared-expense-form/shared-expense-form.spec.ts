@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
 
+import { AbonoDetailState } from '../../../core/abono-detail-state/abono-detail-state';
 import { Accounts } from '../../../core/accounts/accounts';
 import { ActiveGroup } from '../../../core/active-group/active-group';
 import { Auth } from '../../../core/auth/auth';
@@ -16,8 +17,9 @@ import { SharedExpenseFormState } from '../../../core/shared-expense-form-state/
 import { SharedExpenseForm } from './shared-expense-form';
 
 // Usado en todos los TestBed de este spec — SharedExpenseForm necesita
-// SettlementsService.settlements$() para calcular isLocked(); por defecto
-// sin settlements (nunca bloqueado), salvo que un describe lo sobreescriba.
+// SettlementsService.settlements$() para calcular hasPayments(); por
+// defecto sin settlements (nunca bloqueado), salvo que un describe lo
+// sobreescriba.
 const fakeSettlementsService = { settlements$: () => of([]) };
 
 // mfx-attachment-picker (primer campo del form) inyecta esto directo — se
@@ -70,7 +72,7 @@ describe('SharedExpenseForm', () => {
     await TestBed.configureTestingModule({
       imports: [SharedExpenseForm],
       providers: [
-        { provide: MovementsService, useValue: { createShared, attachFile } },
+        { provide: MovementsService, useValue: { createShared, attachFile, groupMovements$: () => of([]) } },
         { provide: AttachmentsService, useValue: fakeAttachmentsService },
         { provide: ReceiptReader, useValue: fakeReceiptReader },
         { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
@@ -566,7 +568,7 @@ describe('SharedExpenseForm — pagos a cuotas (Fase 10+1)', () => {
     await TestBed.configureTestingModule({
       imports: [SharedExpenseForm],
       providers: [
-        { provide: MovementsService, useValue: { createShared } },
+        { provide: MovementsService, useValue: { createShared, groupMovements$: () => of([]) } },
         { provide: AttachmentsService, useValue: fakeAttachmentsService },
         { provide: ReceiptReader, useValue: fakeReceiptReader },
         { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
@@ -716,7 +718,7 @@ describe('SharedExpenseForm without an active group', () => {
     await TestBed.configureTestingModule({
       imports: [SharedExpenseForm],
       providers: [
-        { provide: MovementsService, useValue: { createShared: vi.fn() } },
+        { provide: MovementsService, useValue: { createShared: vi.fn(), groupMovements$: () => of([]) } },
         { provide: AttachmentsService, useValue: fakeAttachmentsService },
         { provide: ReceiptReader, useValue: fakeReceiptReader },
         { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
@@ -754,7 +756,7 @@ describe('SharedExpenseForm with a single-member group (Fase 9, personal-flow UI
     await TestBed.configureTestingModule({
       imports: [SharedExpenseForm],
       providers: [
-        { provide: MovementsService, useValue: { createShared } },
+        { provide: MovementsService, useValue: { createShared, groupMovements$: () => of([]) } },
         { provide: AttachmentsService, useValue: fakeAttachmentsService },
         { provide: ReceiptReader, useValue: fakeReceiptReader },
         { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
@@ -857,7 +859,7 @@ describe('SharedExpenseForm in edit mode (Fase 10)', () => {
       providers: [
         {
           provide: MovementsService,
-          useValue: { updateShared, removeShared, createShared, attachFile, removeAttachment },
+          useValue: { updateShared, removeShared, createShared, attachFile, removeAttachment, groupMovements$: () => of([]) },
         },
         { provide: AttachmentsService, useValue: { getDownloadUrl } },
         { provide: ReceiptReader, useValue: fakeReceiptReader },
@@ -928,7 +930,7 @@ describe('SharedExpenseForm in edit mode (Fase 10)', () => {
   });
 
   // Ajuste posterior: un plan de cuotas ya NO bloquea la edición por sí
-  // solo — solo pagar la primera cuota lo hace (ver isLocked()). Un gasto
+  // solo — solo pagar la primera cuota lo hace (ver hasPayments()). Un gasto
   // SIN cuotas (este fixture) sigue totalmente editable, incluida la
   // posibilidad de agregarlas retroactivamente.
   it('showInstallmentOption() is true — editable, 2 miembros, sin cuotas (aún) pagadas', () => {
@@ -1075,7 +1077,7 @@ describe('SharedExpenseForm editing an existing installment plan (not yet paid)'
     await TestBed.configureTestingModule({
       imports: [SharedExpenseForm],
       providers: [
-        { provide: MovementsService, useValue: { updateShared, removeShared: vi.fn(), createShared: vi.fn() } },
+        { provide: MovementsService, useValue: { updateShared, removeShared: vi.fn(), createShared: vi.fn(), groupMovements$: () => of([]) } },
         { provide: AttachmentsService, useValue: fakeAttachmentsService },
         { provide: ReceiptReader, useValue: fakeReceiptReader },
         { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
@@ -1227,7 +1229,7 @@ describe('SharedExpenseForm — cadena reactiva monto → división → cuotas (
     await TestBed.configureTestingModule({
       imports: [SharedExpenseForm],
       providers: [
-        { provide: MovementsService, useValue: { updateShared, removeShared: vi.fn(), createShared: vi.fn() } },
+        { provide: MovementsService, useValue: { updateShared, removeShared: vi.fn(), createShared: vi.fn(), groupMovements$: () => of([]) } },
         { provide: AttachmentsService, useValue: fakeAttachmentsService },
         { provide: ReceiptReader, useValue: fakeReceiptReader },
         { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
@@ -1371,7 +1373,7 @@ describe('SharedExpenseForm editing a movement whose group grew beyond 2 members
     await TestBed.configureTestingModule({
       imports: [SharedExpenseForm],
       providers: [
-        { provide: MovementsService, useValue: { updateShared, removeShared: vi.fn(), createShared: vi.fn() } },
+        { provide: MovementsService, useValue: { updateShared, removeShared: vi.fn(), createShared: vi.fn(), groupMovements$: () => of([]) } },
         { provide: AttachmentsService, useValue: fakeAttachmentsService },
         { provide: ReceiptReader, useValue: fakeReceiptReader },
         { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
@@ -1437,7 +1439,7 @@ describe('SharedExpenseForm in edit mode with a non-equal split (Fase 10)', () =
     await TestBed.configureTestingModule({
       imports: [SharedExpenseForm],
       providers: [
-        { provide: MovementsService, useValue: { updateShared: vi.fn(), removeShared: vi.fn(), createShared: vi.fn() } },
+        { provide: MovementsService, useValue: { updateShared: vi.fn(), removeShared: vi.fn(), createShared: vi.fn(), groupMovements$: () => of([]) } },
         { provide: AttachmentsService, useValue: fakeAttachmentsService },
         { provide: ReceiptReader, useValue: fakeReceiptReader },
         { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
@@ -1497,7 +1499,7 @@ describe('SharedExpenseForm viewed by someone who did not register it (read-only
     await TestBed.configureTestingModule({
       imports: [SharedExpenseForm],
       providers: [
-        { provide: MovementsService, useValue: { updateShared: vi.fn(), removeShared: vi.fn(), createShared: vi.fn() } },
+        { provide: MovementsService, useValue: { updateShared: vi.fn(), removeShared: vi.fn(), createShared: vi.fn(), groupMovements$: () => of([]) } },
         { provide: AttachmentsService, useValue: fakeAttachmentsService },
         { provide: ReceiptReader, useValue: fakeReceiptReader },
         { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
@@ -1517,15 +1519,15 @@ describe('SharedExpenseForm viewed by someone who did not register it (read-only
     fixture.detectChanges();
   });
 
-  it('readOnly() is true, isLocked() is false, and there is no delete section', () => {
+  it('readOnly() is true, hasPayments() is false, and there is no delete section', () => {
     expect(component.readOnly()).toBe(true);
-    expect(component.isLocked()).toBe(false);
+    expect(component.hasPayments()).toBe(false);
     expect(component.showDangerZone()).toBe(false);
     expect(fixture.nativeElement.textContent).not.toContain('Zona de peligro');
   });
 
-  it('shows no lock message (that one is reserved for the settlement guard)', () => {
-    expect(fixture.nativeElement.textContent).not.toContain('ya hay un saldo relacionado');
+  it('shows no lock message (that one is reserved for fieldsLockedByPayments)', () => {
+    expect(fixture.nativeElement.textContent).not.toContain('abono');
   });
 
   it('disables the whole reactive form', () => {
@@ -1570,9 +1572,15 @@ describe('SharedExpenseForm viewed by someone who did not register it (read-only
   });
 });
 
-describe('SharedExpenseForm locked by a later settlement (even for the creator)', () => {
+// Ajuste posterior (prompt 3 del sistema de abonos): el bloqueo YA NO
+// viene de un heurístico por fecha ni hace readOnly() = true para el
+// dueño — viene de computeDebts().paid > 0 (ver movementHasPayments) y
+// solo bloquea monto/división/quién pagó/cuotas/borrar, nunca categoría/
+// nota/adjunto. El dueño sigue pudiendo guardar esos cambios.
+describe('SharedExpenseForm locked by an abono applied to it (even for the creator)', () => {
   let component: SharedExpenseForm;
   let fixture: ComponentFixture<SharedExpenseForm>;
+  let updateShared: ReturnType<typeof vi.fn>;
 
   const existingMovement = {
     id: 'm1',
@@ -1593,7 +1601,7 @@ describe('SharedExpenseForm locked by a later settlement (even for the creator)'
     ],
     accountId: 'acc1',
   };
-  // ...pero ya hay un settlement posterior entre los involucrados.
+  // ...pero ya hay un abono con allocation explícita hacia este gasto.
   const lockingSettlement = {
     id: 's1',
     groupId: 'group1',
@@ -1603,13 +1611,20 @@ describe('SharedExpenseForm locked by a later settlement (even for the creator)'
     date: { toDate: () => new Date('2026-02-15'), toMillis: () => new Date('2026-02-15').getTime() } as never,
     note: '',
     linkedMovementId: null,
+    allocations: [{ movementId: 'm1', debtorUid: 'u2', installmentIndex: null, amount: 50 }],
+    allocationMode: 'manual' as const,
   };
 
   beforeEach(async () => {
+    updateShared = vi.fn().mockResolvedValue(undefined);
+
     await TestBed.configureTestingModule({
       imports: [SharedExpenseForm],
       providers: [
-        { provide: MovementsService, useValue: { updateShared: vi.fn(), removeShared: vi.fn(), createShared: vi.fn() } },
+        {
+          provide: MovementsService,
+          useValue: { updateShared, removeShared: vi.fn(), createShared: vi.fn(), groupMovements$: () => of([existingMovement]) },
+        },
         { provide: AttachmentsService, useValue: fakeAttachmentsService },
         { provide: ReceiptReader, useValue: fakeReceiptReader },
         { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
@@ -1629,20 +1644,53 @@ describe('SharedExpenseForm locked by a later settlement (even for the creator)'
     fixture.detectChanges();
   });
 
-  it('isLocked() and readOnly() are both true, even though the viewer is the creator', () => {
-    expect(component.isLocked()).toBe(true);
-    expect(component.readOnly()).toBe(true);
+  it('hasPayments()/fieldsLockedByPayments() are true, but readOnly() stays false for the creator', () => {
+    expect(component.hasPayments()).toBe(true);
+    expect(component.fieldsLockedByPayments()).toBe(true);
+    expect(component.readOnly()).toBe(false);
     expect(component.showDangerZone()).toBe(false);
   });
 
-  it('shows the lock message and hides "Zona de peligro"', () => {
+  it('shows the lock message with a link to the one abono that applied, and hides "Zona de peligro"\'s delete button', () => {
     const text = fixture.nativeElement.textContent;
-    expect(text).toContain('No se puede modificar, ya hay un saldo relacionado marcado como pagado.');
-    expect(text).not.toContain('Zona de peligro');
+    expect(text).toContain('Este gasto tiene 1 abono aplicado. Anúlalos para cambiarlo.');
+    expect(text).toContain('Zona de peligro');
+    expect(text).toContain('No se puede eliminar: tiene abonos aplicados.');
+    expect(fixture.nativeElement.querySelector('.mfx-btn-danger')).toBeNull();
   });
 
-  it('hides the submit button', () => {
-    expect(fixture.nativeElement.querySelector('button[type="submit"]')).toBeNull();
+  it('keeps the submit button, so categoría/nota/adjunto can still be saved', () => {
+    expect(fixture.nativeElement.querySelector('button[type="submit"]')).not.toBeNull();
+  });
+
+  it('disables monto and the paidBy/split-type buttons, but leaves categoría/nota enabled', () => {
+    expect(component.form.controls.amount.disabled).toBe(true);
+    expect(component.form.controls.categoryId.disabled).toBe(false);
+    expect(component.form.controls.note.disabled).toBe(false);
+
+    const personButtons: HTMLButtonElement[] = Array.from(
+      fixture.nativeElement.querySelectorAll('.mfx-shared-expense-form__person')
+    );
+    expect(personButtons.every((btn) => btn.disabled)).toBe(true);
+  });
+
+  it('saving only the note still goes through updateShared() with the preserved amount/split', async () => {
+    component.form.controls.note.setValue('nota nueva');
+
+    await component.submit();
+
+    expect(updateShared).toHaveBeenCalledWith(
+      'm1',
+      existingMovement,
+      expect.objectContaining({ amount: 100, note: 'nota nueva' })
+    );
+  });
+
+  it('openLockingSettlement() opens the abono detail for the locking settlement', () => {
+    component.openLockingSettlement(lockingSettlement as never);
+
+    const state = TestBed.inject(AbonoDetailState);
+    expect(state.context()).toEqual({ groupId: 'group1', settlementId: 's1' });
   });
 });
 
@@ -1673,8 +1721,16 @@ describe('SharedExpenseForm locked with an installment plan (read-only cuotas vi
     ],
     accountId: 'acc1',
     installments: [
-      { dueDate: { toDate: () => new Date('2026-02-10') } as never, amount: 25, status: 'paid' as const },
-      { dueDate: { toDate: () => new Date('2026-03-10') } as never, amount: 25, status: 'pending' as const },
+      {
+        dueDate: { toDate: () => new Date('2026-02-10'), toMillis: () => new Date('2026-02-10').getTime() } as never,
+        amount: 25,
+        status: 'paid' as const,
+      },
+      {
+        dueDate: { toDate: () => new Date('2026-03-10'), toMillis: () => new Date('2026-03-10').getTime() } as never,
+        amount: 25,
+        status: 'pending' as const,
+      },
     ],
   };
   const lockingSettlement = {
@@ -1686,13 +1742,18 @@ describe('SharedExpenseForm locked with an installment plan (read-only cuotas vi
     date: { toDate: () => new Date('2026-02-10'), toMillis: () => new Date('2026-02-10').getTime() } as never,
     note: '',
     linkedMovementId: null,
+    allocations: [{ movementId: 'm1', debtorUid: 'u2', installmentIndex: 0, amount: 25 }],
+    allocationMode: 'manual' as const,
   };
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [SharedExpenseForm],
       providers: [
-        { provide: MovementsService, useValue: { updateShared: vi.fn(), removeShared: vi.fn(), createShared: vi.fn() } },
+        {
+          provide: MovementsService,
+          useValue: { updateShared: vi.fn(), removeShared: vi.fn(), createShared: vi.fn(), groupMovements$: () => of([existingMovement]) },
+        },
         { provide: AttachmentsService, useValue: fakeAttachmentsService },
         { provide: ReceiptReader, useValue: fakeReceiptReader },
         { provide: Accounts, useValue: { accounts$: of(fakeAccounts) } },
@@ -1719,7 +1780,7 @@ describe('SharedExpenseForm locked with an installment plan (read-only cuotas vi
 
   it('shows the lock message and the read-only installment plan', () => {
     const text = fixture.nativeElement.textContent;
-    expect(text).toContain('No se puede modificar, ya hay un saldo relacionado marcado como pagado.');
+    expect(text).toContain('Este gasto tiene 1 abono aplicado. Anúlalos para cambiarlo.');
     expect(text).toContain('Cuotas');
 
     const rows = fixture.nativeElement.querySelectorAll('mfx-installment-row');

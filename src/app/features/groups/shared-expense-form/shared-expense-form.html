@@ -37,7 +37,7 @@
               type="button"
               class="mfx-shared-expense-form__person"
               [class.mfx-shared-expense-form__person--active]="paidByValue() === member.uid"
-              [disabled]="readOnly()"
+              [disabled]="readOnly() || fieldsLockedByPayments()"
               (click)="selectPaidBy(member.uid)"
             >
               <mfx-avatar [photoUrl]="member.photoURL" [displayName]="member.displayName" [size]="32" />
@@ -102,7 +102,7 @@
               type="button"
               class="mfx-shared-expense-form__split-type"
               [class.mfx-shared-expense-form__split-type--active]="splitTypeValue() === option.value"
-              [disabled]="readOnly()"
+              [disabled]="readOnly() || fieldsLockedByPayments()"
               (click)="selectSplitType(option.value)"
             >
               {{ option.label }}
@@ -228,10 +228,27 @@
       <p class="mfx-form__error" role="alert">{{ errorMessage() }}</p>
     }
 
-    @if (isLocked()) {
-      <p class="mfx-form__error" role="alert">
-        No se puede modificar, ya hay un saldo relacionado marcado como pagado.
-      </p>
+    @if (fieldsLockedByPayments()) {
+      <div class="mfx-form__field">
+        <span class="mfx-form__error" role="alert">
+          @if (lockingSettlements().length > 0) {
+            Este gasto tiene {{ lockingSettlements().length }} abono{{ lockingSettlements().length === 1 ? '' : 's' }}
+            aplicado{{ lockingSettlements().length === 1 ? '' : 's' }}. Anúlalos para cambiarlo.
+          } @else {
+            Este gasto ya tiene abonos aplicados (asignados automáticamente, de antes de guardar el desglose exacto).
+            Anúlalos desde la actividad del grupo para cambiarlo.
+          }
+        </span>
+        @if (lockingSettlements().length > 0) {
+          <div class="mfx-shared-expense-form__locking-settlements">
+            @for (settlement of lockingSettlements(); track settlement.id) {
+              <button type="button" class="mfx-shared-expense-form__locking-link" (click)="openLockingSettlement(settlement)">
+                Ver abono de {{ settlement.amount | mfxCurrency }}
+              </button>
+            }
+          </div>
+        }
+      </div>
     }
 
     @if (readOnlyInstallments(); as installments) {
@@ -266,12 +283,14 @@
     }
   </form>
 
-  @if (showDangerZone()) {
+  @if (showDangerZone() || fieldsLockedByPayments()) {
     <div class="mfx-section-header">
       <h4>Zona de peligro</h4>
     </div>
 
-    @if (!confirmingDelete()) {
+    @if (fieldsLockedByPayments()) {
+      <p class="mfx-form__error" role="alert">No se puede eliminar: tiene abonos aplicados. Anúlalos primero.</p>
+    } @else if (!confirmingDelete()) {
       <button type="button" class="mfx-btn-danger" (click)="confirmingDelete.set(true)">Eliminar gasto</button>
     } @else {
       <div class="mfx-shared-expense-form__confirm">

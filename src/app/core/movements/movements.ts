@@ -6,15 +6,13 @@ import {
   collection,
   collectionData,
   doc,
-  getCountFromServer,
   increment,
   query,
+  serverTimestamp,
   updateDoc,
   where,
   writeBatch,
 } from '@angular/fire/firestore';
-import { Functions, httpsCallable } from '@angular/fire/functions';
-
 import { Auth } from '../auth/auth';
 import { AttachmentsService } from '../attachments/attachments';
 import type { PreparedAttachment } from '../attachments/attachment-compression';
@@ -62,7 +60,6 @@ function signedAmount(type: MovementType, amount: number): number {
 })
 export class MovementsService {
   private readonly firestore = inject(Firestore);
-  private readonly functions = inject(Functions);
   private readonly auth = inject(Auth);
   private readonly attachmentsService = inject(AttachmentsService);
 
@@ -100,7 +97,10 @@ export class MovementsService {
     const batch = writeBatch(this.firestore);
 
     const movementRef = doc(collection(this.firestore, 'movements'));
-    const movement: PersonalMovement = {
+    // serverTimestamp() devuelve un FieldValue (sentinel), no un Timestamp
+    // real — válido para escribir, pero no es el tipo que createdAt declara
+    // para cuando ya se LEYÓ de vuelta (ver movement.model.ts).
+    const movement: Omit<PersonalMovement, 'createdAt'> & { createdAt: ReturnType<typeof serverTimestamp> } = {
       uid,
       accountId: value.accountId,
       categoryId: value.categoryId,
@@ -109,6 +109,7 @@ export class MovementsService {
       date: Timestamp.fromDate(value.date),
       note: value.note,
       groupId,
+      createdAt: serverTimestamp(),
     };
     batch.set(movementRef, movement);
 
@@ -230,22 +231,12 @@ export class MovementsService {
     );
   }
 
-  // Conteo total (no reactivo, no trae los documentos) — usado por el
-  // historial de actividad del grupo para saber si hay más de los ~10 que
-  // ya muestra sin tener que descargarlos todos.
-  async countGroupMovements(groupId: string): Promise<number> {
-    const snapshot = await getCountFromServer(
-      query(collection(this.firestore, 'movements'), where('groupId', '==', groupId))
-    );
-    return snapshot.data().count;
-  }
-
   async createShared(value: SharedMovementFormValue): Promise<string> {
     const uid = this.requireUid();
     const batch = writeBatch(this.firestore);
 
     const movementRef = doc(collection(this.firestore, 'movements'));
-    const movement: SharedMovement = {
+    const movement: Omit<SharedMovement, 'createdAt'> & { createdAt: ReturnType<typeof serverTimestamp> } = {
       uid,
       categoryId: value.categoryId,
       categoryName: value.categoryName,
@@ -261,6 +252,7 @@ export class MovementsService {
       accountId: value.accountId,
       installments: value.installments ?? null,
       hasPendingInstallments: !!value.installments && value.installments.length > 0,
+      createdAt: serverTimestamp(),
     };
     batch.set(movementRef, movement);
 
@@ -332,26 +324,6 @@ export class MovementsService {
     await batch.commit();
     if (movement.attachmentPath) {
       await this.attachmentsService.remove(movement.attachmentPath);
-    }
-  }
-
-  // Marca una cuota específica como pagada Y crea el settlement
-  // correspondiente, atómico, server-side (ver DATABASE.md, "Pagos a
-  // cuotas"). Corre vía Cloud Function porque actualizar installments en el
-  // movement requiere escribir un documento que el deudor no necesariamente
-  // "posee" (uid == quien registró el gasto, no necesariamente el deudor) —
-  // la regla de movements solo permite update a isOwner(uid). Ver
-  // SettlementForm, que llama a esto en vez de SettlementsService.create()
-  // cuando context().installmentRef está presente.
-  async payInstallment(movementId: string, installmentIndex: number, note: string): Promise<void> {
-    const callable = httpsCallable<
-      { movementId: string; installmentIndex: number; note: string },
-      { settlementId: string }
-    >(this.functions, 'payInstallment');
-    try {
-      await callable({ movementId, installmentIndex, note });
-    } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Ocurrió un error inesperado.');
     }
   }
 

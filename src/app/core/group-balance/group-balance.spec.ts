@@ -1,15 +1,35 @@
-import type { SharedMovement } from '../../models/movement.model';
 import type { Settlement } from '../../models/settlement.model';
-import { calculateGroupBalance, isSharedMovementLocked } from './group-balance';
-
-const FAKE_DATE = {} as never;
+import type { MovementWithId } from '../debts/debts';
+import { calculateGroupBalance } from './group-balance';
 
 function ts(date: string) {
   return { toDate: () => new Date(date), toMillis: () => new Date(date).getTime() } as never;
 }
 
-function movement(paidBy: string, amount: number, splits: [string, number][], date = FAKE_DATE): SharedMovement {
+// Fecha por defecto cuando un test no la necesita — tiene que ser una
+// fecha REAL (con toMillis()), nunca un objeto vacío: computeDebts() la usa
+// para ordenar "deuda más antigua primero" (ver core/debts/debts.ts), así
+// que hasta un test que no le presta atención a las fechas la necesita
+// funcional. Cada llamada a movement()/settlement() sin fecha explícita
+// recibe un día distinto y creciente, para que el orden entre ellos sea
+// determinista sin que el test tenga que elegir fechas a mano.
+let fakeDateCounter = 0;
+function nextFakeDate() {
+  fakeDateCounter += 1;
+  return ts(`2026-01-${String(fakeDateCounter).padStart(2, '0')}`);
+}
+
+let movementIdCounter = 0;
+
+function movement(
+  paidBy: string,
+  amount: number,
+  splits: [string, number][],
+  date = nextFakeDate()
+): MovementWithId {
+  movementIdCounter += 1;
   return {
+    id: `m${movementIdCounter}`,
     uid: paidBy,
     categoryId: 'cat1',
     type: 'expense',
@@ -20,10 +40,10 @@ function movement(paidBy: string, amount: number, splits: [string, number][], da
     paidBy,
     splitType: 'equal',
     splits: splits.map(([uid, splitAmount]) => ({ uid, amount: splitAmount, settled: false })),
-  };
+  } as MovementWithId;
 }
 
-function settlement(fromUid: string, toUid: string, amount: number, date = FAKE_DATE): Settlement {
+function settlement(fromUid: string, toUid: string, amount: number, date = nextFakeDate()): Settlement {
   return { groupId: 'group1', fromUid, toUid, amount, date, note: '', linkedMovementId: null };
 }
 
@@ -39,14 +59,26 @@ describe('calculateGroupBalance', () => {
     expect(calculateGroupBalance(movements, [])).toEqual([{ fromUid: 'B', toUid: 'A', amount: 50 }]);
   });
 
-  it('nets multiple movements between the same pair into a single edge', () => {
-    // A paga 100 (B le debe 50) y luego B paga 30 dividido igual (A le debe 15) -> neto: B le debe 35 a A.
+  // Decisión de producto (ver DATABASE.md, "Balance de grupo y abonos"):
+  // las deudas NUNCA se cruzan, ni entre direcciones de la misma pareja.
+  // Antes esto "neteaba" a una sola línea de 35 — ya no: quedan dos líneas
+  // independientes, cada una con lo que le corresponde saldar a cada uno.
+  it('keeps BOTH directions of the same pair as independent lines — nunca se cruzan', () => {
+    // A paga 100 (B le debe 50 a A) y luego B paga 30 dividido igual (A le debe 15 a B).
     const movements = [
       movement('A', 100, [['A', 50], ['B', 50]]),
       movement('B', 30, [['A', 15], ['B', 15]]),
     ];
 
-    expect(calculateGroupBalance(movements, [])).toEqual([{ fromUid: 'B', toUid: 'A', amount: 35 }]);
+    const edges = calculateGroupBalance(movements, []);
+
+    expect(edges).toHaveLength(2);
+    expect(edges).toEqual(
+      expect.arrayContaining([
+        { fromUid: 'B', toUid: 'A', amount: 50 },
+        { fromUid: 'A', toUid: 'B', amount: 15 },
+      ])
+    );
   });
 
   it('a settlement fully cancels the debt it covers', () => {
@@ -63,25 +95,31 @@ describe('calculateGroupBalance', () => {
     expect(calculateGroupBalance(movements, settlements)).toEqual([{ fromUid: 'B', toUid: 'A', amount: 30 }]);
   });
 
-  it('a pair whose debts cancel out inside the pair produces no transfer', () => {
+  it('three independent directions never cancel out, ni siquiera dentro de la misma pareja A-B', () => {
     // Movimiento 1: A paga 90, dividido entre A, B y C (30 c/u) -> B y C deben 30 c/u a A.
     // Movimiento 2: B paga 60, dividido entre A y B (30 c/u) -> A le debe 30 a B.
-    // Por pareja: A-B se cancelan (B le debe 30 a A, A le debe 30 a B -> 0). C le debe 30 a A.
-    // Resultado esperado: un solo giro, C le debe 30 a A.
+    // Antes esto "neteaba" A-B a cero — ya no: quedan 3 líneas independientes.
     const movements = [
       movement('A', 90, [['A', 30], ['B', 30], ['C', 30]]),
       movement('B', 60, [['A', 30], ['B', 30]]),
     ];
 
-    expect(calculateGroupBalance(movements, [])).toEqual([{ fromUid: 'C', toUid: 'A', amount: 30 }]);
+    const edges = calculateGroupBalance(movements, []);
+
+    expect(edges).toHaveLength(3);
+    expect(edges).toEqual(
+      expect.arrayContaining([
+        { fromUid: 'B', toUid: 'A', amount: 30 },
+        { fromUid: 'C', toUid: 'A', amount: 30 },
+        { fromUid: 'A', toUid: 'B', amount: 30 },
+      ])
+    );
   });
 
-  it('keeps one line per pair even when a person both receives and owes', () => {
+  it('keeps one line per DIRECTION even when a person both receives and owes (distintas parejas)', () => {
     // Mov 1: C paga 150, dividido [A:100, C:50] -> A le debe 100 a C.
     // Mov 2: C paga 50, dividido [B:50]          -> B le debe 50 a C.
     // Mov 3: D paga 30, dividido [C:30]          -> C le debe 30 a D.
-    // C recibe de A y de B, pero también le debe a D: son parejas distintas,
-    // así que no se netean entre sí (el balance es por pareja, no global).
     const movements = [
       movement('C', 150, [['A', 100], ['C', 50]]),
       movement('C', 50, [['B', 50]]),
@@ -96,6 +134,30 @@ describe('calculateGroupBalance', () => {
         { fromUid: 'A', toUid: 'C', amount: 100 },
         { fromUid: 'B', toUid: 'C', amount: 50 },
         { fromUid: 'C', toUid: 'D', amount: 30 },
+      ])
+    );
+  });
+
+  // TEST OBLIGATORIO — el ejemplo del usuario: 4 direcciones entre 3
+  // personas, todas independientes (Laura participa en 3 de las 4, en los
+  // dos sentidos con Diego Y con Tatiana, y ninguna se toca con otra).
+  it('4 direcciones independientes entre 3 personas, incluida la misma pareja en ambos sentidos', () => {
+    const movements = [
+      movement('laura', 100000, [['laura', 0], ['diego', 100000]]), // diego -> laura
+      movement('tatiana', 80000, [['tatiana', 0], ['laura', 80000]]), // laura -> tatiana
+      movement('diego', 80000, [['diego', 0], ['laura', 80000]]), // laura -> diego
+      movement('laura', 30000, [['laura', 0], ['tatiana', 30000]]), // tatiana -> laura
+    ];
+
+    const edges = calculateGroupBalance(movements, []);
+
+    expect(edges).toHaveLength(4);
+    expect(edges).toEqual(
+      expect.arrayContaining([
+        { fromUid: 'diego', toUid: 'laura', amount: 100000 },
+        { fromUid: 'laura', toUid: 'tatiana', amount: 80000 },
+        { fromUid: 'laura', toUid: 'diego', amount: 80000 },
+        { fromUid: 'tatiana', toUid: 'laura', amount: 30000 },
       ])
     );
   });
@@ -121,9 +183,9 @@ describe('calculateGroupBalance', () => {
     expect(calculateGroupBalance(movements, [])).toEqual([]);
   });
 
-  // TEST OBLIGATORIO — escenario real que destapó el bug del neto global.
-  // La deuda es por pareja: Laura no le debe a Diego "a través" de Tatiana.
-  it('escenario Tatiana/Diego/Laura: una línea por pareja, sin netear contra terceros', () => {
+  // TEST OBLIGATORIO — escenario real que destapó el bug del neto global,
+  // ahora con el modelo sin cruce: 4 líneas, una por dirección.
+  it('escenario Tatiana/Diego/Laura: 4 líneas (una por dirección), sin cruzar nada', () => {
     // Diego paga 62.000 entre los tres: 62.000 / 3 = 20.666,66 con 0,02 de
     // sobrante. distributeEqually le da el sobrante al primero del grupo; acá
     // se asume que es Diego (quien paga), así que Tatiana y Laura deben
@@ -137,122 +199,80 @@ describe('calculateGroupBalance', () => {
 
     const edges = calculateGroupBalance(movements, []);
 
-    expect(edges).toHaveLength(3);
+    expect(edges).toHaveLength(4);
     expect(edges).toEqual(
       expect.arrayContaining([
-        { fromUid: 'tatiana', toUid: 'diego', amount: 10666.66 },
+        { fromUid: 'tatiana', toUid: 'diego', amount: 20666.66 },
         { fromUid: 'laura', toUid: 'diego', amount: 20666.66 },
+        { fromUid: 'diego', toUid: 'tatiana', amount: 10000 },
         { fromUid: 'laura', toUid: 'tatiana', amount: 10000 },
       ])
     );
   });
 
-  it('un pago entre dos personas solo reduce la deuda de ESA pareja', () => {
+  it('un pago entre dos personas solo reduce la deuda de ESA dirección, nunca la contraria', () => {
     const movements = [
       movement('diego', 62000, [['diego', 20666.68], ['tatiana', 20666.66], ['laura', 20666.66]]),
       movement('tatiana', 30000, [['tatiana', 10000], ['diego', 10000], ['laura', 10000]]),
     ];
-    // Laura le paga todo a Diego: baja solo lo que Laura le debe a Diego.
+    // Laura le paga todo a Diego: baja solo laura->diego. diego->tatiana
+    // (una dirección completamente distinta, aunque Diego sea el mismo)
+    // queda intacta.
     const settlements = [settlement('laura', 'diego', 20666.66)];
 
     const edges = calculateGroupBalance(movements, settlements);
 
-    expect(edges).toHaveLength(2);
+    expect(edges).toHaveLength(3);
     expect(edges).toEqual(
       expect.arrayContaining([
-        { fromUid: 'tatiana', toUid: 'diego', amount: 10666.66 },
+        { fromUid: 'tatiana', toUid: 'diego', amount: 20666.66 },
+        { fromUid: 'diego', toUid: 'tatiana', amount: 10000 },
         { fromUid: 'laura', toUid: 'tatiana', amount: 10000 },
       ])
     );
   });
-});
 
-describe('isSharedMovementLocked', () => {
-  it('false with no settlements at all', () => {
-    const m = movement('A', 100, [['A', 50], ['B', 50]], ts('2026-02-10'));
+  // TEST OBLIGATORIO — deudas cruzadas: dos líneas INDEPENDIENTES, un abono
+  // a una nunca toca la otra (antes esto se "volteaba" en una sola línea neta).
+  it('deudas cruzadas: dos líneas independientes — un abono a una nunca toca la otra', () => {
+    // A: Tatiana paga, Diego le debe 27.700. B: Diego paga, Tatiana le debe 15.000.
+    const movA = movement('tatiana', 27700, [['tatiana', 0], ['diego', 27700]]);
+    const movB = movement('diego', 15000, [['diego', 0], ['tatiana', 15000]]);
 
-    expect(isSharedMovementLocked(m, [])).toBe(false);
+    expect(calculateGroupBalance([movA, movB], [])).toEqual(
+      expect.arrayContaining([
+        { fromUid: 'diego', toUid: 'tatiana', amount: 27700 },
+        { fromUid: 'tatiana', toUid: 'diego', amount: 15000 },
+      ])
+    );
+
+    // Diego abona 20.000, asignados a A (no a B): A queda parcial (resta 7.700).
+    const abono: Settlement = {
+      groupId: 'group1',
+      fromUid: 'diego',
+      toUid: 'tatiana',
+      amount: 20000,
+      date: nextFakeDate(),
+      note: '',
+      linkedMovementId: null,
+      allocations: [{ movementId: movA.id, debtorUid: 'diego', installmentIndex: null, amount: 20000 }],
+      allocationMode: 'manual',
+    };
+
+    // diego->tatiana baja a 7.700 (lo que falta de A); tatiana->diego sigue
+    // en 15.000, intacta — nunca se cruzan.
+    expect(calculateGroupBalance([movA, movB], [abono])).toEqual(
+      expect.arrayContaining([
+        { fromUid: 'diego', toUid: 'tatiana', amount: 7700 },
+        { fromUid: 'tatiana', toUid: 'diego', amount: 15000 },
+      ])
+    );
   });
 
-  it('false when every settlement predates the movement (could not have assumed its current amount)', () => {
-    const m = movement('A', 100, [['A', 50], ['B', 50]], ts('2026-02-10'));
-    const s = settlement('B', 'A', 50, ts('2026-02-05'));
+  it('un abono voided no cuenta en el balance', () => {
+    const movements = [movement('A', 100, [['A', 50], ['B', 50]])];
+    const voided: Settlement = { ...settlement('B', 'A', 50), status: 'voided' };
 
-    expect(isSharedMovementLocked(m, [s])).toBe(false);
-  });
-
-  it('true when a settlement on the same date involves the payer', () => {
-    const m = movement('A', 100, [['A', 50], ['B', 50]], ts('2026-02-10'));
-    const s = settlement('B', 'A', 50, ts('2026-02-10'));
-
-    expect(isSharedMovementLocked(m, [s])).toBe(true);
-  });
-
-  it('true when a later settlement involves someone from the splits, even if not the payer', () => {
-    const m = movement('A', 100, [['A', 50], ['B', 50]], ts('2026-02-10'));
-    // Settlement entre B y un tercero C, nada que ver con A — pero B sí
-    // participaba en el gasto, así que su balance ya pudo haber cambiado.
-    const s = settlement('B', 'C', 20, ts('2026-02-15'));
-
-    expect(isSharedMovementLocked(m, [s])).toBe(true);
-  });
-
-  it('false when a later settlement involves none of the people in the movement', () => {
-    const m = movement('A', 100, [['A', 50], ['B', 50]], ts('2026-02-10'));
-    const s = settlement('C', 'D', 20, ts('2026-02-15'));
-
-    expect(isSharedMovementLocked(m, [s])).toBe(false);
-  });
-
-  // Regresión: pagar una cuota crea un settlement real, pero ese settlement
-  // no referencia al movimiento de origen — el chequeo por fecha de arriba
-  // puede fallar si el gasto se creó con una fecha elegida a mano posterior
-  // al momento real en que se pagó la primera cuota (p. ej. "Hogar" creado
-  // hoy con Fecha = 2 oct, cuota 1 pagada antes de esa fecha). Para cuotas,
-  // installments[].status ya lo sabe con certeza — no hace falta la fecha.
-  describe('con plan de cuotas (ver DATABASE.md, "Pagos a cuotas")', () => {
-    function withInstallments(m: SharedMovement, installments: SharedMovement['installments']): SharedMovement {
-      return { ...m, installments };
-    }
-
-    it('true as soon as one installment is "paid", with zero settlements at all', () => {
-      const m = withInstallments(movement('A', 300, [['A', 150], ['B', 150]], ts('2026-02-10')), [
-        { dueDate: ts('2026-02-10'), amount: 150, status: 'paid' },
-        { dueDate: ts('2026-03-10'), amount: 150, status: 'pending' },
-      ]);
-
-      expect(isSharedMovementLocked(m, [])).toBe(true);
-    });
-
-    it('true even when the lone settlement predates the movement — exactly the regression repro', () => {
-      // El gasto se "crea" (fecha elegida a mano) DESPUÉS del momento real
-      // en que se pagó la cuota — el heurístico de fecha por sí solo diría
-      // "no bloqueado", pero installments[].status='paid' no deja dudas.
-      const m = withInstallments(movement('A', 1380000, [['A', 690000], ['B', 690000]], ts('2026-10-02')), [
-        { dueDate: ts('2026-10-02'), amount: 460000, status: 'paid' },
-        { dueDate: ts('2026-11-02'), amount: 460000, status: 'pending' },
-        { dueDate: ts('2026-12-02'), amount: 460000, status: 'pending' },
-      ]);
-      const earlierSettlement = settlement('B', 'A', 460000, ts('2026-09-28'));
-
-      expect(isSharedMovementLocked(m, [earlierSettlement])).toBe(true);
-    });
-
-    it('false while every installment is still "pending"', () => {
-      const m = withInstallments(movement('A', 300, [['A', 150], ['B', 150]], ts('2026-02-10')), [
-        { dueDate: ts('2026-02-10'), amount: 150, status: 'pending' },
-        { dueDate: ts('2026-03-10'), amount: 150, status: 'pending' },
-      ]);
-
-      expect(isSharedMovementLocked(m, [])).toBe(false);
-    });
-
-    it('false for a movement with an empty or absent installments array (falls through to the date heuristic)', () => {
-      const withEmpty = withInstallments(movement('A', 100, [['A', 50], ['B', 50]], ts('2026-02-10')), []);
-      const withNull = withInstallments(movement('A', 100, [['A', 50], ['B', 50]], ts('2026-02-10')), null);
-
-      expect(isSharedMovementLocked(withEmpty, [])).toBe(false);
-      expect(isSharedMovementLocked(withNull, [])).toBe(false);
-    });
+    expect(calculateGroupBalance(movements, [voided])).toEqual([{ fromUid: 'B', toUid: 'A', amount: 50 }]);
   });
 });

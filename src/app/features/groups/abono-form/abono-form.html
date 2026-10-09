@@ -1,0 +1,173 @@
+<form class="mfx-form mfx-abono-form" (ngSubmit)="submit()">
+  <p>
+    @if (isPayerView()) {
+      Vas a registrar que le pagaste a {{ context().toName }}.
+    } @else {
+      Vas a registrar que {{ context().fromName }} te pagó.
+    }
+  </p>
+
+  <div class="mfx-abono-form__rows">
+    @if (unpaidByMovement().length === 0) {
+      <p class="mfx-abono-form__empty">No hay deudas pendientes de {{ context().fromName }} hacia {{ context().toName }}.</p>
+    }
+
+    @for (group of unpaidByMovement(); track group.movementId) {
+      <div class="mfx-abono-form__movement">
+        <div class="mfx-abono-form__movement-header">
+          <span>{{ movementLabel(group.movementId) }}</span>
+          @if (movementFor(group.movementId); as movement) {
+            <span class="mfx-abono-form__movement-date">{{ movement.date.toDate() | date: 'd MMM' }}</span>
+          }
+        </div>
+
+        @for (debt of group.debts; track debt.installmentIndex ?? 0) {
+          <div class="mfx-abono-form__row" [class.mfx-abono-form__row--selected]="isSelected(debt)">
+            <mfx-checkbox
+              class="mfx-abono-form__row-check"
+              [ngModel]="isSelected(debt)"
+              name="selected-{{ group.movementId }}-{{ debt.installmentIndex }}"
+              (ngModelChange)="toggleRow(debt)"
+            >
+              @if (debt.installmentIndex !== null) {
+                Cuota {{ debt.installmentIndex + 1 }}
+              } @else {
+                Pago único
+              }
+              · {{ debt.total | mfxCurrency }} · abonado {{ debt.paid | mfxCurrency }} · resta
+              {{ debt.remaining | mfxCurrency }}
+            </mfx-checkbox>
+
+            @if (isSelected(debt)) {
+              <div class="mfx-abono-form__row-amount">
+                <input
+                  mfxCurrencyInput
+                  class="mfx-input"
+                  [ngModel]="resolvedAmount(debt)"
+                  name="amount-{{ group.movementId }}-{{ debt.installmentIndex }}"
+                  placeholder="0"
+                  (ngModelChange)="setAmount(debt, $event)"
+                  (blur)="onAmountBlur(debt)"
+                />
+                <button type="button" class="mfx-abono-form__full-btn" (click)="setFull(debt)">Pagar completo</button>
+              </div>
+              <p
+                class="mfx-abono-form__row-preview"
+                [class.mfx-abono-form__row-preview--paid]="previewStatusFor(debt) === 'pagada'"
+                [class.mfx-abono-form__row-preview--partial]="previewStatusFor(debt) !== 'pagada'"
+              >
+                @if (previewStatusFor(debt) === 'pagada') {
+                  Quedará pagada.
+                } @else {
+                  Quedará parcial (resta {{ previewRemainingFor(debt) | mfxCurrency }}).
+                }
+              </p>
+            }
+          </div>
+        }
+      </div>
+    }
+
+    @if (paidByMovement().length > 0) {
+      <button type="button" class="mfx-abono-form__toggle-paid" (click)="showPaidRows.set(!showPaidRows())">
+        {{ showPaidRows() ? 'Ocultar pagadas' : 'Ver pagadas' }} ({{ paidRows().length }})
+      </button>
+      @if (showPaidRows()) {
+        @for (group of paidByMovement(); track group.movementId) {
+          <div class="mfx-abono-form__movement mfx-abono-form__movement--paid">
+            <div class="mfx-abono-form__movement-header">
+              <span>{{ movementLabel(group.movementId) }}</span>
+            </div>
+            @for (debt of group.debts; track debt.installmentIndex ?? 0) {
+              <div class="mfx-abono-form__row mfx-abono-form__row--paid">
+                <span>
+                  @if (debt.installmentIndex !== null) {
+                    Cuota {{ debt.installmentIndex + 1 }}
+                  } @else {
+                    Pago único
+                  }
+                  — {{ debt.total | mfxCurrency }} · ✓ Pagada
+                </span>
+              </div>
+            }
+          </div>
+        }
+      }
+    }
+  </div>
+
+  <div class="mfx-abono-form__total">
+    <span>Total a abonar</span>
+    <strong>{{ total() | mfxCurrency }}</strong>
+  </div>
+
+  <mfx-checkbox
+    class="mfx-abono-form__distribute-toggle"
+    [ngModel]="showDistribute()"
+    name="showDistribute"
+    (ngModelChange)="showDistribute.set($event)"
+  >
+    Distribuir un monto
+  </mfx-checkbox>
+  @if (showDistribute()) {
+    <div class="mfx-abono-form__distribute">
+      <input
+        mfxCurrencyInput
+        class="mfx-input"
+        [class.mfx-input--error]="autoDistributeError() !== null"
+        [ngModel]="autoDistributeAmount()"
+        name="autoDistributeAmount"
+        placeholder="0"
+        (ngModelChange)="autoDistributeAmount.set($event)"
+      />
+      <button type="button" class="mfx-btn-secondary" (click)="distributeAutomatic()">Distribuir</button>
+    </div>
+    @if (autoDistributeError()) {
+      <p class="mfx-form__error" role="alert">{{ autoDistributeError() }}</p>
+    }
+  }
+
+  <div class="mfx-abono-form__preview">
+    @if (remainingAfter() > 0) {
+      <p>{{ context().fromName }} le seguirá debiendo {{ remainingAfter() | mfxCurrency }} a {{ context().toName }}.</p>
+    } @else if (total() > 0) {
+      <p>{{ context().fromName }} queda al día con {{ context().toName }} en esta dirección.</p>
+    }
+  </div>
+
+  <label class="mfx-form__field">
+    Fecha
+    <input type="date" [ngModel]="date()" name="date" (ngModelChange)="date.set($event)" />
+  </label>
+
+  <label class="mfx-form__field">
+    Nota
+    <textarea [ngModel]="note()" name="note" (ngModelChange)="note.set($event)" placeholder="Opcional"></textarea>
+  </label>
+
+  <mfx-checkbox [ngModel]="registerPersonalMovement()" name="registerPersonalMovement" (ngModelChange)="registerPersonalMovement.set($event)">
+    Registrar también como movimiento personal
+  </mfx-checkbox>
+
+  @if (registerPersonalMovement()) {
+    <label class="mfx-form__field">
+      Cuenta
+      <select [ngModel]="accountId()" name="accountId" (ngModelChange)="accountId.set($event)">
+        <option value="" disabled>Selecciona una cuenta</option>
+        @for (account of accounts(); track account.id) {
+          <option [value]="account.id">{{ account.name }}</option>
+        }
+      </select>
+    </label>
+  }
+
+  @if (errorMessage()) {
+    <p class="mfx-form__error" role="alert">{{ errorMessage() }}</p>
+  }
+
+  <div class="mfx-form__actions">
+    <button type="submit" class="mfx-btn-primary" [disabled]="!canSubmit()">
+      {{ saving() ? 'Guardando…' : 'Registrar abono de ' + (total() | mfxCurrency) }}
+    </button>
+  </div>
+</form>

@@ -4,17 +4,18 @@ import { FormBuilder, FormControl, FormGroup, ReactiveFormsModule, Validators } 
 import { Timestamp } from 'firebase/firestore';
 import { of, switchMap } from 'rxjs';
 
+import { AbonoDetailState } from '../../../core/abono-detail-state/abono-detail-state';
 import { Accounts } from '../../../core/accounts/accounts';
 import { ActiveGroup } from '../../../core/active-group/active-group';
 import { Auth } from '../../../core/auth/auth';
 import { Categories } from '../../../core/categories/categories';
-import { isSharedMovementLocked } from '../../../core/group-balance/group-balance';
+import { movementHasPayments } from '../../../core/debts/debts';
 import { GroupsService, type GroupMemberProfile } from '../../../core/groups/groups';
 import { ModalStack } from '../../../core/modal-stack/modal-stack';
 import { MovementsService, type SharedMovementWithId } from '../../../core/movements/movements';
 import { matchCategory } from '../../../core/receipt-category-match/receipt-category-match';
 import { ReceiptReader, type ReceiptExtraction } from '../../../core/receipt-reader/receipt-reader';
-import { SettlementsService } from '../../../core/settlements/settlements';
+import { SettlementsService, type SettlementWithId } from '../../../core/settlements/settlements';
 import { SharedExpenseFormState } from '../../../core/shared-expense-form-state/shared-expense-form-state';
 import type { Installment, MovementSplit, SplitType } from '../../../models/movement.model';
 import { AttachmentPicker, type PendingAttachment } from '../../../shared/attachment-picker/attachment-picker';
@@ -131,6 +132,7 @@ export class SharedExpenseForm {
   private readonly fb = inject(FormBuilder);
   private readonly sharedExpenseFormState = inject(SharedExpenseFormState);
   private readonly modalStack = inject(ModalStack);
+  private readonly abonoDetailState = inject(AbonoDetailState);
 
   readonly saved = output<void>();
   readonly deleted = output<void>();
@@ -138,7 +140,8 @@ export class SharedExpenseForm {
   // Presente solo en modo edición — ver SharedExpenseFormState.openEdit().
   // GroupActivity abre este modal para CUALQUIER miembro que toque la fila,
   // sin filtrar por quién la creó — el guard de permisos (readOnly) y de
-  // settlement (isLocked) vive acá, no allá (ver esos computed más abajo).
+  // abonos aplicados (fieldsLockedByPayments) vive acá, no allá (ver esos
+  // computed más abajo).
   readonly initialValue = input<SharedMovementWithId | null>(null);
 
   // Cuando se abre desde un grupo específico (GroupDetail, tarjeta de la
@@ -247,49 +250,79 @@ export class SharedExpenseForm {
 
   readonly needsAccount = computed(() => !!this.paidByValue() && this.paidByValue() === this.currentUid());
 
-  // Settlements del grupo — solo para el chequeo de bloqueo (ver isLocked);
-  // en modo creación groupId() puede ir cambiando antes de fijarse, así que
-  // reacciona a él igual que members(), no se pide una sola vez.
+  // Settlements y movements del grupo — movementHasPayments() necesita el
+  // balance completo del grupo (computeDebts), no solo este movimiento; en
+  // modo creación groupId() puede ir cambiando antes de fijarse, así que
+  // reaccionan a él igual que members(), no se piden una sola vez.
   private readonly settlements = toSignal(
     toObservable(this.groupId).pipe(switchMap((id) => (id ? this.settlementsService.settlements$(id) : of([])))),
-    { initialValue: [] }
+    { initialValue: [] as SettlementWithId[] }
+  );
+  private readonly movements = toSignal(
+    toObservable(this.groupId).pipe(switchMap((id) => (id ? this.movementsService.groupMovements$(id) : of([])))),
+    { initialValue: [] as SharedMovementWithId[] }
   );
 
-  readonly isLocked = computed(() => {
-    const existing = this.initialValue();
-    return !!existing && isSharedMovementLocked(existing, this.settlements());
-  });
-
-  // Solo lectura si quien mira no es quien lo creó, o si ya está bloqueado
-  // por un settlement posterior — un plan de cuotas YA NO bloquea por sí
-  // solo: mientras ninguna cuota se haya pagado, sigue editable igual que
-  // cualquier otro gasto compartido (pagar la primera cuota crea un
-  // settlement real, que isLocked() ya detecta — ver DATABASE.md / "Pagos
-  // a cuotas"). En modo creación (initialValue null) nunca aplica.
+  // Solo lectura si quien mira no es quien lo creó — ya NO depende de si
+  // hay abonos aplicados (ver fieldsLockedByPayments más abajo): el dueño
+  // siempre puede entrar a editar categoría/nota/adjunto, aunque monto/
+  // división/cuotas/borrar estén bloqueados. En modo creación (initialValue
+  // null) nunca aplica.
   readonly readOnly = computed(() => {
     const existing = this.initialValue();
-    if (!existing) {
-      return false;
-    }
-    return existing.uid !== this.currentUid() || this.isLocked();
+    return !!existing && existing.uid !== this.currentUid();
   });
 
+  // ¿Alguna deuda de este gasto ya tiene algo abonado? Fuente: computeDebts
+  // (ver core/debts/debts.ts, movementHasPayments) — reemplaza al viejo
+  // isSharedMovementLocked (heurístico por fecha) e installments[].status.
+  readonly hasPayments = computed(() => {
+    const existing = this.initialValue();
+    return !!existing && movementHasPayments(existing.id, this.movements(), this.settlements());
+  });
+
+  // Bloquea monto/división/quién pagó/cuotas/borrar — nunca categoría/nota/
+  // adjunto (ver plantilla) — mientras el dueño sigue pudiendo entrar a
+  // editar esos campos. No aplica si ya es readOnly() (eso ya bloquea todo)
+  // ni en modo creación.
+  readonly fieldsLockedByPayments = computed(() => !this.readOnly() && this.hasPayments());
+
+  // Abonos activos con allocation explícita hacia este gasto — para
+  // enlazar cada uno desde el mensaje de bloqueo (ver plantilla). Solo
+  // cubre abonos con allocations explícitas: uno legacy auto-asignado
+  // también cuenta para hasPayments() pero no deja un registro de a qué
+  // gasto aplicó, así que no hay a qué enlazar (limitación conocida).
+  readonly lockingSettlements = computed(() => {
+    const existing = this.initialValue();
+    if (!existing) {
+      return [];
+    }
+    return this.settlements().filter(
+      (s) => s.status !== 'voided' && s.allocations?.some((allocation) => allocation.movementId === existing.id)
+    );
+  });
+
+  openLockingSettlement(settlement: SettlementWithId): void {
+    this.abonoDetailState.open(settlement);
+  }
+
   // "Zona de peligro" (eliminar): solo para quien lo creó, y solo si no
-  // está bloqueado — igual que readOnly() pero sin confundir "no es mío"
-  // con "está bloqueado" en la plantilla.
+  // tiene abonos aplicados — igual que readOnly() pero sin confundir "no es
+  // mío" con "bloqueado por abonos" en la plantilla.
   readonly showDangerZone = computed(() => {
     const existing = this.initialValue();
-    return !!existing && existing.uid === this.currentUid() && !this.isLocked();
+    return !!existing && existing.uid === this.currentUid() && !this.hasPayments();
   });
 
   // Vista de solo lectura del plan de cuotas — reemplaza al formulario
-  // editable cuando el gasto no se puede tocar (bloqueado, o de otro
-  // miembro). Lee installments directo de initialValue(), nunca recalcula
-  // nada (sin esto, mostrar el formulario editable con members() todavía
-  // sin cargar producía un "$0" pasajero en el encabezado de la deuda —
-  // ver DATABASE.md / "Pagos a cuotas").
+  // editable cuando las cuotas no se pueden tocar (showInstallmentOption()
+  // en false, por cualquier motivo: de otro miembro, con abonos aplicados,
+  // o el grupo creció a 3+ miembros). Lee installments directo de
+  // initialValue(), nunca recalcula nada (sin esto, mostrar el formulario
+  // editable con members() todavía sin cargar producía un "$0" pasajero en
+  // el encabezado de la deuda — ver DATABASE.md / "Pagos a cuotas").
   readonly readOnlyInstallments = computed(() => {
-    if (!this.readOnly()) {
+    if (this.showInstallmentOption()) {
       return null;
     }
     const installments = this.initialValue()?.installments;
@@ -320,10 +353,13 @@ export class SharedExpenseForm {
 
   // Cuotas (ver DATABASE.md / "Pagos a cuotas") — solo para grupos de
   // exactamente 2 miembros, y solo mientras el gasto siga editable (al
-  // crear, o al editar si todavía no se pagó ninguna cuota — ver
-  // readOnly()). Si el grupo creció a 3+ miembros después de crear el plan,
-  // esto se oculta pero el plan existente NO se toca (ver submit()).
-  readonly showInstallmentOption = computed(() => !this.readOnly() && this.members().length === 2);
+  // crear, o al editar si todavía no se abonó nada — ver
+  // fieldsLockedByPayments()). Si el grupo creció a 3+ miembros después de
+  // crear el plan, esto se oculta pero el plan existente NO se toca (ver
+  // submit()).
+  readonly showInstallmentOption = computed(
+    () => !this.readOnly() && !this.fieldsLockedByPayments() && this.members().length === 2
+  );
 
   readonly payInInstallmentsValue = toSignal(this.form.controls.payInInstallments.valueChanges, {
     initialValue: this.form.controls.payInInstallments.value,
@@ -479,16 +515,25 @@ export class SharedExpenseForm {
     // Deshabilita TODO el formulario (campos reactivos + splitInputs, que
     // es un FormArray aparte) cuando es de solo lectura — los botones que
     // no son controles reactivos (paidBy, tipo de división) se deshabilitan
-    // directo en la plantilla con [disabled]="readOnly()".
+    // directo en la plantilla con [disabled]="readOnly() || fieldsLockedByPayments()".
+    // Con abonos aplicados (sin ser readOnly), solo se bloquean monto y
+    // splitInputs — categoría/nota/cuenta/fecha siguen editables; las
+    // cuotas ni siquiera se ofrecen (ver showInstallmentOption()), así que
+    // installmentInputs no necesita deshabilitarse aparte.
     effect(() => {
       if (this.readOnly()) {
         this.form.disable({ emitEvent: false });
         this.splitInputs.disable({ emitEvent: false });
         this.installmentInputs.disable({ emitEvent: false });
-      } else {
-        this.form.enable({ emitEvent: false });
-        this.splitInputs.enable({ emitEvent: false });
-        this.installmentInputs.enable({ emitEvent: false });
+        return;
+      }
+      this.form.enable({ emitEvent: false });
+      this.splitInputs.enable({ emitEvent: false });
+      this.installmentInputs.enable({ emitEvent: false });
+
+      if (this.fieldsLockedByPayments()) {
+        this.form.controls.amount.disable({ emitEvent: false });
+        this.splitInputs.disable({ emitEvent: false });
       }
     });
 
@@ -556,10 +601,11 @@ export class SharedExpenseForm {
       this.splitInputs.push(this.fb.nonNullable.group({ uid: member.uid, value }));
     }
 
-    // El effect que deshabilita splitInputs según readOnly() ya pudo haber
-    // corrido antes de que este array tuviera estos grupos (p. ej. members()
-    // resuelve después, async) — se refuerza acá para no depender del orden.
-    if (this.readOnly()) {
+    // El effect que deshabilita splitInputs según readOnly()/
+    // fieldsLockedByPayments() ya pudo haber corrido antes de que este
+    // array tuviera estos grupos (p. ej. members() resuelve después,
+    // async) — se refuerza acá para no depender del orden.
+    if (this.readOnly() || this.fieldsLockedByPayments()) {
       this.splitInputs.disable({ emitEvent: false });
     }
   }

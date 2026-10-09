@@ -1,11 +1,14 @@
 import { initializeApp } from 'firebase-admin/app';
 import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore';
-import type { DocumentSnapshot, Firestore } from 'firebase-admin/firestore';
+import type { DocumentSnapshot, Firestore, QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
-import { onDocumentCreated } from 'firebase-functions/v2/firestore';
+import { onDocumentCreated, onDocumentUpdated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+
+import { type MovementDocForDebts, type SettlementDocForDebts, cuotaDebtsForPair, remainingForDebt } from './debts';
+import { buildSettlementCreatedNotification, buildSettlementVoidedNotification } from './settlement-notifications';
 
 initializeApp();
 
@@ -772,16 +775,37 @@ interface PayInstallmentResponse {
   settlementId: string;
 }
 
+// Compartidos por payInstallment y syncInstallmentStatus: pasar de los
+// QueryDocumentSnapshot crudos de `movements`/`settlements` a la forma
+// plana que espera functions/src/debts.ts — una sola vez, en vez de
+// repetir el mapeo en cada función que necesita leer el grupo completo.
+function toMovementDocsForDebts(docs: QueryDocumentSnapshot[]): MovementDocForDebts[] {
+  return docs.map((movementDoc) => {
+    const data = movementDoc.data();
+    return {
+      id: movementDoc.id,
+      date: data['date'] as Timestamp,
+      paidBy: data['paidBy'] as string,
+      splits: (data['splits'] as MovementSplitForNotify[] | undefined) ?? [],
+      installments: data['installments'] as InstallmentData[] | null | undefined,
+    };
+  });
+}
+
+function toSettlementDocsForDebts(docs: QueryDocumentSnapshot[]): SettlementDocForDebts[] {
+  return docs.map((settlementDoc) => settlementDoc.data() as SettlementDocForDebts);
+}
+
 // Paga una cuota específica de un plan de cuotas (ver DATABASE.md, "Pagos a
-// cuotas") — crea el settlement parcial Y marca esa cuota como pagada en el
-// movement de origen, atómico (una transacción), para que nunca queden
-// desalineados. Corre server-side porque actualizar installments[i] en el
-// movement requiere escribir un documento que el deudor no necesariamente
-// "posee" (uid == quien registró el gasto, no necesariamente el deudor) —
-// la regla de movements solo permite update a isOwner(uid). A diferencia de
-// SettlementsService.create() (cliente), esta vía no soporta "registrar
-// también como movimiento personal" — no se pidió para cuotas, y evita
-// duplicar esa lógica acá.
+// cuotas") — crea el abono (con allocations) Y marca esa cuota como pagada
+// en el movement de origen, atómico (una transacción), para que nunca
+// queden desalineados. Corre server-side porque actualizar installments[i]
+// en el movement requiere escribir un documento que el deudor no
+// necesariamente "posee" (uid == quien registró el gasto, no
+// necesariamente el deudor) — la regla de movements solo permite update a
+// isOwner(uid). A diferencia de SettlementsService.createSettlement()
+// (cliente), esta vía no soporta "registrar también como movimiento
+// personal" — no se pidió para cuotas, y evita duplicar esa lógica acá.
 export const payInstallment = onCall({ region: REGION }, async (request): Promise<PayInstallmentResponse> => {
   const uid = request.auth?.uid;
   if (!uid) {
@@ -825,8 +849,36 @@ export const payInstallment = onCall({ region: REGION }, async (request): Promis
     if (!installment) {
       throw new HttpsError('not-found', 'Esa cuota no existe.');
     }
+    // Chequeo rápido, por el caso común (doble tap del mismo botón): si
+    // installments[i] ya dice 'paid', ni hace falta la vuelta de abajo.
     if (installment.status === 'paid') {
       throw new HttpsError('failed-precondition', 'Esa cuota ya está pagada.');
+    }
+
+    // Chequeo real: installments[i].status puede estar DESACTUALIZADO si
+    // esta cuota ya quedó cubierta por otro camino — el más probable,
+    // "Marcar como saldada" auto-asignó su abono a esta misma deuda (es la
+    // más antigua de la pareja) sin tocar installments[] (ese botón nunca
+    // escribe el movement). Sin este chequeo, se podría pagar la misma
+    // cuota dos veces. Se relee TODO movements+settlements del grupo
+    // DENTRO de la transacción (tx.get soporta queries en el SDK Admin, a
+    // diferencia del SDK cliente) para que Firestore reintente esta
+    // transacción si algo cambia antes de escribir — misma cobertura de
+    // concurrencia que createSettlement() del cliente, pero sin su ventana
+    // de carrera.
+    const [groupMovementsSnap, groupSettlementsSnap] = await Promise.all([
+      tx.get(firestore.collection('movements').where('groupId', '==', groupId)),
+      tx.get(firestore.collection('settlements').where('groupId', '==', groupId)),
+    ]);
+    const groupMovements = toMovementDocsForDebts(groupMovementsSnap.docs);
+    const groupSettlements = toSettlementDocsForDebts(groupSettlementsSnap.docs);
+
+    const remaining = remainingForDebt(groupMovements, groupSettlements, movementId, debtor.uid, installmentIndex);
+    if (remaining < installment.amount - 0.005) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Esa cuota ya no tiene saldo pendiente — alguien ya la pagó (puede haber sido al saldar toda la deuda de un golpe).'
+      );
     }
 
     const nextInstallments = installments.map((inst, index) =>
@@ -834,14 +886,26 @@ export const payInstallment = onCall({ region: REGION }, async (request): Promis
     );
     const stillPending = nextInstallments.some((inst) => inst.status === 'pending');
 
+    const now = Timestamp.now();
     tx.set(settlementRef, {
       groupId,
       fromUid: debtor.uid,
       toUid: paidBy,
       amount: installment.amount,
-      date: Timestamp.now(),
+      date: now,
       note,
       linkedMovementId: null,
+      // Abono con allocations (ver DATABASE.md, "Balance de grupo y
+      // abonos"): "pagar completo" de ESTA cuota, por exactamente su monto
+      // — nada que distribuir, una sola allocation. installments[i].status
+      // sigue actualizándose abajo (lo lee la UI de cuotas y el recordatorio
+      // de hasPendingInstallments), pero ya no es la fuente de verdad del
+      // cálculo de balance (ver core/debts/debts.ts, computeDebts): esa
+      // ahora es este abono.
+      allocations: [{ movementId, debtorUid: debtor.uid, installmentIndex, amount: installment.amount }],
+      allocationMode: 'manual',
+      createdBy: uid,
+      createdAt: now,
     });
     tx.update(movementRef, {
       installments: nextInstallments,
@@ -849,6 +913,199 @@ export const payInstallment = onCall({ region: REGION }, async (request): Promis
     });
 
     return { settlementId: settlementRef.id };
+  });
+});
+
+// Mantiene installments[i].status sincronizado con el balance real (ver
+// DATABASE.md, "Balance de grupo y abonos") para cualquier camino que NO
+// sea payInstallment — el más común, "Marcar como saldada"/"Abonar" desde
+// el modal (SettlementsService.createSettlement(), cliente), que puede
+// dejar una cuota en remaining 0 sin tocar el movement (el deudor no es su
+// dueño). Se dispara con CUALQUIER escritura de un settlement (create,
+// update — incluida una anulación futura: status -> 'voided' puede hacer
+// que una cuota que estaba pagada vuelva a 'pending'), no solo al crearlo.
+//
+// No alcanza con mirar las allocations del settlement que disparó esto: un
+// abono legacy (sin allocations) se auto-asigna a la deuda más antigua de
+// la pareja, así que anular o crear uno puede desplazarle el pago a OTRA
+// cuota que ni siquiera aparece ahí. Por eso se recalculan TODAS las
+// deudas de cuota de esa pareja (cuotaDebtsForPair), no solo las
+// referenciadas.
+//
+// No dispara notifySharedExpenseAssigned (onDocumentCreated de
+// 'movements/{id}'): esa solo reacciona a la CREACIÓN de un movement,
+// nunca a un update, así que tx.update() de abajo no la re-dispara. No hay
+// otro trigger ni push atado a installments[]/hasPendingInstallments —
+// solo el recordatorio diario (processRecurringPayments/
+// remindPendingInstallments), que es un onSchedule, no reacciona a esto.
+export const syncInstallmentStatus = onDocumentWritten({ document: 'settlements/{settlementId}', region: REGION }, async (event) => {
+  const after = event.data?.after?.exists ? event.data.after.data() : undefined;
+  const before = event.data?.before?.exists ? event.data.before.data() : undefined;
+  const settlement = after ?? before;
+  if (!settlement) {
+    return;
+  }
+
+  const groupId = settlement['groupId'] as string | undefined;
+  const fromUid = settlement['fromUid'] as string | undefined;
+  const toUid = settlement['toUid'] as string | undefined;
+  if (!groupId || !fromUid || !toUid) {
+    return;
+  }
+
+  const firestore = getFirestore();
+
+  await firestore.runTransaction(async (tx) => {
+    const [groupMovementsSnap, groupSettlementsSnap] = await Promise.all([
+      tx.get(firestore.collection('movements').where('groupId', '==', groupId)),
+      tx.get(firestore.collection('settlements').where('groupId', '==', groupId)),
+    ]);
+    const groupMovements = toMovementDocsForDebts(groupMovementsSnap.docs);
+    const groupSettlements = toSettlementDocsForDebts(groupSettlementsSnap.docs);
+
+    const cuotaDebts = cuotaDebtsForPair(groupMovements, groupSettlements, fromUid, toUid);
+    if (cuotaDebts.length === 0) {
+      return;
+    }
+
+    const debtsByMovementId = new Map<string, typeof cuotaDebts>();
+    for (const debt of cuotaDebts) {
+      const list = debtsByMovementId.get(debt.movementId) ?? [];
+      list.push(debt);
+      debtsByMovementId.set(debt.movementId, list);
+    }
+
+    for (const movementSnap of groupMovementsSnap.docs) {
+      const debtsForThisMovement = debtsByMovementId.get(movementSnap.id);
+      if (!debtsForThisMovement) {
+        continue;
+      }
+      const installments = movementSnap.data()['installments'] as InstallmentData[] | undefined;
+      if (!installments?.length) {
+        continue;
+      }
+
+      let changed = false;
+      const nextInstallments = installments.map((installment, index) => {
+        const debt = debtsForThisMovement.find((d) => d.installmentIndex === index);
+        if (!debt) {
+          return installment;
+        }
+        // Solo 'pending'/'paid' existen en este campo — una cuota parcial
+        // se queda en 'pending' (el modelo viejo no tiene un tercer estado).
+        const shouldBePaid = debt.remaining <= 0;
+        const nextStatus = shouldBePaid ? 'paid' : 'pending';
+        if (installment.status === nextStatus) {
+          return installment;
+        }
+        changed = true;
+        return { ...installment, status: nextStatus };
+      });
+
+      if (!changed) {
+        continue;
+      }
+      tx.update(movementSnap.ref, {
+        installments: nextInstallments,
+        hasPendingInstallments: nextInstallments.some((inst) => inst.status === 'pending'),
+      });
+    }
+  });
+});
+
+// Push al crear un abono — solo para "la otra parte" (ver
+// settlement-notifications.ts): nunca para createdBy (ya sabe que lo
+// registró), nunca para un tercero del grupo (un abono es cosa de dos).
+// No dispara en el movimiento personal opcional que createSettlement()
+// crea en el mismo batch (ver SettlementsService) — ese es un documento
+// de `movements`, no de `settlements`, así que no entra a este trigger.
+export const notifySettlementCreated = onDocumentCreated({ document: 'settlements/{settlementId}', region: REGION }, async (event) => {
+  const snap = event.data;
+  if (!snap) {
+    return;
+  }
+  const settlement = snap.data();
+  const groupId = settlement['groupId'] as string | undefined;
+  const fromUid = settlement['fromUid'] as string | undefined;
+  const toUid = settlement['toUid'] as string | undefined;
+  const createdBy = settlement['createdBy'] as string | undefined;
+  const amount = settlement['amount'] as number | undefined;
+  if (!groupId || !fromUid || !toUid || !createdBy || !amount) {
+    return; // abono legacy (de antes de createdBy) o dato incompleto — no hay a quién notificar con certeza.
+  }
+
+  const firestore = getFirestore();
+  const [payerSnap, receiverSnap] = await Promise.all([
+    firestore.collection('users').doc(fromUid).get(),
+    firestore.collection('users').doc(toUid).get(),
+  ]);
+  const notification = buildSettlementCreatedNotification({
+    fromUid,
+    toUid,
+    createdBy,
+    amount,
+    payerName: (payerSnap.data()?.['displayName'] as string | undefined) || 'Alguien',
+    receiverName: (receiverSnap.data()?.['displayName'] as string | undefined) || 'alguien',
+  });
+  if (!notification) {
+    return;
+  }
+
+  console.log(`[notifySettlementCreated] ${event.params.settlementId}: notificando a ${notification.recipientUid}`);
+  await sendPushNotification(firestore, notification.recipientUid, {
+    title: notification.title,
+    body: notification.body,
+    channelId: GROUP_ACTIVITY_CHANNEL_ID,
+    data: { type: 'group-detail', groupId },
+  });
+});
+
+// Push al anular un abono — solo en la transición activo -> anulado (nunca
+// en la creación con status ya 'voided', que no existe, ni en cualquier
+// otro update como nota/adjunto). Igual que al crear: solo "la otra
+// parte", nunca voidedBy, nunca un tercero.
+export const notifySettlementVoided = onDocumentUpdated({ document: 'settlements/{settlementId}', region: REGION }, async (event) => {
+  const before = event.data?.before.data();
+  const after = event.data?.after.data();
+  if (!before || !after) {
+    return;
+  }
+  const wasActive = (before['status'] as string | undefined) !== 'voided';
+  const isNowVoided = (after['status'] as string | undefined) === 'voided';
+  if (!wasActive || !isNowVoided) {
+    return;
+  }
+
+  const groupId = after['groupId'] as string | undefined;
+  const fromUid = after['fromUid'] as string | undefined;
+  const toUid = after['toUid'] as string | undefined;
+  const voidedBy = after['voidedBy'] as string | undefined;
+  const amount = after['amount'] as number | undefined;
+  const voidReason = after['voidReason'] as string | undefined;
+  if (!groupId || !fromUid || !toUid || !voidedBy || !amount || !voidReason) {
+    return;
+  }
+
+  const firestore = getFirestore();
+  const voiderSnap = await firestore.collection('users').doc(voidedBy).get();
+  const notification = buildSettlementVoidedNotification({
+    fromUid,
+    toUid,
+    voidedBy,
+    amount,
+    voidReason,
+    voiderName: (voiderSnap.data()?.['displayName'] as string | undefined) || 'Alguien',
+  });
+  if (!notification) {
+    return;
+  }
+
+  console.log(`[notifySettlementVoided] ${event.params.settlementId}: notificando a ${notification.recipientUid}`);
+  await sendPushNotification(firestore, notification.recipientUid, {
+    title: notification.title,
+    body: notification.body,
+    channelId: GROUP_ACTIVITY_CHANNEL_ID,
+    data: { type: 'group-detail', groupId },
   });
 });
 

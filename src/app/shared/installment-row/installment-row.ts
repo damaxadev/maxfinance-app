@@ -1,13 +1,15 @@
 import { Component, computed, input, output } from '@angular/core';
 
+import type { Debt } from '../../core/debts/debts';
 import type { Installment } from '../../models/movement.model';
 import { AnimatedNumber } from '../animated-number/animated-number';
+import { MfxCurrencyPipe } from '../currency/currency.pipe';
 
 export type InstallmentRowSize = 'cozy' | 'compact';
 
 @Component({
   selector: 'mfx-installment-row',
-  imports: [AnimatedNumber],
+  imports: [AnimatedNumber, MfxCurrencyPipe],
   templateUrl: './installment-row.html',
   styleUrl: './installment-row.scss',
 })
@@ -24,9 +26,22 @@ export class InstallmentRow {
   // embebido en GroupActivity — título+fecha en una sola línea, más chico,
   // para que una fila de actividad no crezca demasiado.
   readonly size = input<InstallmentRowSize>('cozy');
+  // Estado REAL de esta cuota, calculado desde los abonos — ver
+  // DATABASE.md, "Balance de grupo y abonos" (core/debts/debts.ts,
+  // computeDebts/debtsByMovement). Ausente (null, default): cae al
+  // criterio viejo, installment().status — lo sigue usando
+  // SharedExpenseForm, que no tiene a mano el balance completo del grupo
+  // para calcularlo. Cualquier consumidor que SÍ lo tenga (GroupActivity)
+  // debe pasarlo siempre: installments[].status ya no es la fuente de
+  // verdad del balance, solo queda para la UI de cuotas y el recordatorio
+  // (hasPendingInstallments) — puede estar desactualizado un instante tras
+  // un abono que no vino de payInstallment (ver syncInstallmentStatus).
+  readonly debt = input<Debt | null>(null);
   readonly pay = output<void>();
 
-  readonly isPaid = computed(() => this.installment().status === 'paid');
+  readonly status = computed(() => this.debt()?.status ?? (this.installment().status === 'paid' ? 'pagada' : 'pendiente'));
+  readonly isPaid = computed(() => this.status() === 'pagada');
+  readonly isPartial = computed(() => this.status() === 'parcial');
 
   // Solo el día, sin hora — "2 de nov", no "2 de nov, 10:03 p.m." (la fecha
   // de una cuota es un plazo, no un instante registrado).
